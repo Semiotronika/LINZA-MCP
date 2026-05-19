@@ -360,6 +360,25 @@ class OperatorSurfaceTests(OperatorTestCase):
         self.assertNotIn(".log", ALLOWED_ARTIFACT_SUFFIXES)
         self.assertEqual({".md", ".txt", ".json", ".pdf", ".docx", ".xlsx"}, ALLOWED_ARTIFACT_SUFFIXES)
 
+    def test_chunker_russian_hints_are_not_mojibake_dead_code(self):
+        from linza_mcp.chunker import semantic_chunk_kind, strip_generated_service_sections
+
+        self.assertEqual(semantic_chunk_kind("Источник: https://example.com", None), "source")
+        self.assertEqual(semantic_chunk_kind("Почему это важно", None), "question")
+        body = (
+            "# Note\n\n"
+            "Keep this.\n\n"
+            "## Связи для графа\n\n"
+            "Generated service block.\n\n"
+            "## Next\n\n"
+            "Keep that.\n"
+        )
+
+        cleaned = strip_generated_service_sections(body)
+        self.assertIn("Keep this.", cleaned)
+        self.assertIn("Keep that.", cleaned)
+        self.assertNotIn("Generated service block.", cleaned)
+
     def test_artifact_file_extractors_support_office_documents(self):
         tmp, vault, storage, core = self.make_core()
         try:

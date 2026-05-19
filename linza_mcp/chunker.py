@@ -4,11 +4,42 @@ from typing import Any, Optional
 from .utils import clean_markdown, extract_title
 
 
+SOURCE_HINT_TERMS = (
+    "arxiv",
+    "doi",
+    "http://",
+    "https://",
+    "\u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a",
+    "\u0440\u0435\u0444\u0435\u0440\u0435\u043d\u0441",
+)
+QUESTION_HINT_TERMS = (
+    "question",
+    "\u0432\u043e\u043f\u0440\u043e\u0441",
+    "\u043f\u043e\u0447\u0435\u043c\u0443",
+    "\u043a\u0430\u043a",
+)
+GENERATED_SERVICE_HEADINGS = (
+    "\u0421\u0432\u044f\u0437\u0438 \u0434\u043b\u044f \u0433\u0440\u0430\u0444\u0430",
+)
+
+
 CHUNK_HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
 CODE_FENCE_RE = re.compile(r"```(\w*)\n(.*?)```", re.DOTALL)
 TABLE_RE = re.compile(r"^(\|.+\|\s*$\n)(\|[:\-|]+\|\s*$\n)?(\|.+\|\s*$\n)+", re.MULTILINE)
 QUOTE_RE = re.compile(r"^>+\s+(.*)$", re.MULTILINE)
 QUESTION_RE = re.compile(r"\?\s*$", re.MULTILINE)
+
+
+def contains_word_hint(text: str, hints: tuple[str, ...]) -> bool:
+    lowered = text.lower()
+    for hint in hints:
+        if "://" in hint:
+            if hint in lowered:
+                return True
+            continue
+        if re.search(rf"(?<!\w){re.escape(hint)}(?!\w)", lowered, re.IGNORECASE):
+            return True
+    return False
 
 
 def _detect_chunk_type(text: str, heading: str) -> str:
@@ -130,9 +161,9 @@ def semantic_chunk_kind(text: str, heading: Optional[str]) -> str:
         return "quote"
     if re.search(r"(?m)^\s{0,3}[-*+]\s+", stripped) or re.search(r"(?m)^\s{0,3}\d+\.\s+", stripped):
         return "list"
-    if re.search(r"\b(arxiv|doi|https?://|РёСЃС‚РѕС‡РЅРёРє|СЂРµС„РµСЂРµРЅСЃ)\b", stripped, re.IGNORECASE):
+    if contains_word_hint(stripped, SOURCE_HINT_TERMS):
         return "source"
-    if "?" in stripped or re.search(r"\b(question|РІРѕРїСЂРѕСЃ|РїРѕС‡РµРјСѓ|РєР°Рє)\b", stripped, re.IGNORECASE):
+    if "?" in stripped or contains_word_hint(stripped, QUESTION_HINT_TERMS):
         return "question"
     if heading:
         return "section"
@@ -178,8 +209,9 @@ def split_semantic_chunks(text: str, max_chars: int = 1200) -> list[dict[str, An
 
 def strip_generated_service_sections(text: str) -> str:
     # Defensive cleanup for old generated service markers from imported vaults.
+    heading_pattern = "|".join(re.escape(title) for title in GENERATED_SERVICE_HEADINGS)
     return re.sub(
-        r"(?ms)^\s{0,3}#{1,6}\s+(?:Связи\s+для\s+графа|РЎРІСЏР·Рё\s+РґР»СЏ\s+РіСЂР°С„Р°)\s*$.*?(?=^\s{0,3}#{1,6}\s+|\Z)",
+        rf"(?ms)^\s{{0,3}}#{{1,6}}\s+(?:{heading_pattern})\s*$.*?(?=^\s{{0,3}}#{{1,6}}\s+|\Z)",
         "",
         text,
     )
