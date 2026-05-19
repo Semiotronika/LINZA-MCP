@@ -58,7 +58,7 @@ load/index → analyze → review cards → explicit apply → context export
 
 ## Быстрый старт
 
-После публикации пакет можно будет установить из PyPI:
+Основной способ установки — PyPI:
 
 ```powershell
 pip install linza-mcp
@@ -72,7 +72,7 @@ linza-mcp
 pip install "linza-mcp[pdf]"
 ```
 
-До публикации или для разработки запускайте из исходников:
+Для проверки локальной копии или разработки можно запускать из исходников:
 
 ```powershell
 cd "C:\path\to\LINZA-MCP"

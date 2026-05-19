@@ -63,7 +63,7 @@ load/index -> analyze -> review cards -> explicit apply -> context export
 
 ## Quick Start
 
-After publication, install it from PyPI:
+Install from PyPI:
 
 ```powershell
 pip install linza-mcp
@@ -77,7 +77,7 @@ For PDF extraction, install the optional extra:
 pip install "linza-mcp[pdf]"
 ```
 
-Before publication, or for development, run it from source:
+For local verification or development, run it from source:
 
 ```powershell
 cd "C:\path\to\LINZA-MCP"
