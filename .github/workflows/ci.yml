@@ -28,5 +28,11 @@ jobs:
       - name: Compile package
         run: python -m compileall linza_mcp
 
+      - name: Build package
+        run: python -m build --sdist --wheel
+
+      - name: Check package metadata
+        run: python -m twine check dist/*
+
       - name: Check whitespace
         run: git diff --check

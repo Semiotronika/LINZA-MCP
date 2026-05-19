@@ -24,3 +24,9 @@ Initial public preparation of LINZA.
 - Generated reports and context packs are restricted to `.linza`.
 - Public package manifest excludes internal migration scripts, local agent
   instructions, test sidecars, and database files.
+
+### Fixed
+
+- Removed the deprecated MIT license classifier so setuptools 77+ can build the
+  package with the SPDX `license = "MIT"` metadata.
+- Added the remaining documented environment variables to `server.json`.

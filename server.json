@@ -49,6 +49,18 @@
           "isSecret": true
         },
         {
+          "name": "LINZA_BRIDGE_THRESHOLD",
+          "description": "Semantic bridge threshold. Defaults to 0.55.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "LINZA_DEFAULT_PROFILE",
+          "description": "Default search profile name. Defaults to general.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
           "name": "LINZA_TOOL_SURFACE",
           "description": "Tool surface: default for the compact public workflow or advanced for development.",
           "isRequired": false,
