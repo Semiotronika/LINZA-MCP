@@ -375,7 +375,7 @@ class OperatorSurfaceTests(OperatorTestCase):
 
         self.assertIn("локальный review-gated sidecar", (root / "README.md").read_text(encoding="utf-8"))
         self.assertIn("Local MCP Server", (root / "README_EN.md").read_text(encoding="utf-8"))
-        self.assertIn("mcp-name: io.github.semiotronika/linza-mcp", (root / "README.md").read_text(encoding="utf-8"))
+        self.assertIn("mcp-name: io.github.Semiotronika/LINZA-MCP", (root / "README.md").read_text(encoding="utf-8"))
         self.assertNotIn("NOUZ", (root / "README.md").read_text(encoding="utf-8"))
         self.assertNotIn("NOUZ", (root / "README_EN.md").read_text(encoding="utf-8"))
         self.assertNotIn("назначаются вручную", (root / "README.md").read_text(encoding="utf-8"))
@@ -437,7 +437,7 @@ class OperatorSurfaceTests(OperatorTestCase):
             self.assertIn(ignored, gitignore)
 
         server_json = json.loads((root / "server.json").read_text(encoding="utf-8"))
-        self.assertEqual(server_json["name"], "io.github.semiotronika/linza-mcp")
+        self.assertEqual(server_json["name"], "io.github.Semiotronika/LINZA-MCP")
         env_names = {
             item["name"]
             for package in server_json["packages"]

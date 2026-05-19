@@ -275,7 +275,7 @@ LINZA is not a browser automation server, cloud memory, or an autopilot that sil
 
 ## Stability
 
-`0.1.2` is an alpha MVP. The safety contract is meant to be stable: source note
+`0.1.3` is an alpha MVP. The safety contract is meant to be stable: source note
 bodies are not rewritten by indexing, artifact ingest, search, map, or grow
 preview. Low-level advanced tools and internal module boundaries may still
 change while the server is being polished.
@@ -340,4 +340,4 @@ python -m unittest test_agent_workspace.AgentWorkspaceTests.test_examples_sample
 
 <sub>Cosines do not converge because everything is the same. They converge when meaning finds its angle.</sub>
 
-<!-- mcp-name: io.github.semiotronika/linza-mcp -->
+<!-- mcp-name: io.github.Semiotronika/LINZA-MCP -->

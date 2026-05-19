@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.3 - 2026-05-20
+
+Official MCP Registry identity fix.
+
+### Fixed
+
+- Updated the MCP server name and PyPI README ownership marker to the exact
+  GitHub repository identity `io.github.Semiotronika/LINZA-MCP` required by the
+  official Registry publisher.
+
 ## 0.1.2 - 2026-05-20
 
 Registry metadata fix before catalog submission.
