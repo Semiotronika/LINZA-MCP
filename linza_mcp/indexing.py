@@ -23,6 +23,30 @@ from .utils import (
 )
 
 
+def embedding_signature(core) -> tuple[str, str, int | None]:
+    """Return the runtime embedding signature stored with indexed vectors."""
+    provider_name = type(core.embed).__name__
+    model = str(getattr(core.embed, "model", "") or "")
+    dim = getattr(core.embed, "dim", None)
+    return provider_name, model, int(dim) if dim is not None else None
+
+
+def _record_matches_embedding_signature(record: dict[str, Any], core) -> bool:
+    if not record.get("embedding"):
+        return False
+    provider_name, model, expected_dim = embedding_signature(core)
+    if record.get("embedding_provider") != provider_name:
+        return False
+    if str(record.get("embedding_model") or "") != model:
+        return False
+    stored_dim = record.get("embedding_dim")
+    if expected_dim is not None and int(stored_dim or 0) != expected_dim:
+        return False
+    if stored_dim is not None and len(record["embedding"]) != int(stored_dim):
+        return False
+    return True
+
+
 async def compute_embeddings(core, texts: List[str]) -> Tuple[List[List[float]], List[List[float]]]:
     """Return raw and current mean-centered embeddings for texts."""
     raw = await core.embed.embed(texts)
@@ -70,6 +94,9 @@ def recompute_corpus_mean_and_recenter_index(core) -> None:
             record["embedding"],
             centered,
             record.get("hash", ""),
+            embedding_provider=record.get("embedding_provider"),
+            embedding_model=record.get("embedding_model"),
+            embedding_dim=record.get("embedding_dim"),
         )
     recenter_profiles(core)
 
@@ -101,6 +128,7 @@ async def index_vault(core, force: bool = False) -> None:
 
     all_raw: list[list[float]] = []
     file_data: list[tuple[str, str, float, list[float], str]] = []
+    provider_name, model, expected_dim = embedding_signature(core)
 
     for file_path in files:
         rel = str(file_path.relative_to(vault)).replace("\\", "/")
@@ -110,7 +138,7 @@ async def index_vault(core, force: bool = False) -> None:
 
         existing = core.storage.get_file_metadata(rel)
         if not force and existing and existing["hash"] == file_hash:
-            if existing["embedding"]:
+            if _record_matches_embedding_signature(existing, core):
                 all_raw.append(existing["embedding"])
                 file_data.append((rel, content, mtime, existing["embedding"], file_hash))
                 continue
@@ -125,7 +153,17 @@ async def index_vault(core, force: bool = False) -> None:
         centered_all = core.centerer.transform(all_raw)
         for item, centered_emb in zip(file_data, centered_all):
             rel, content, mtime, raw_emb, file_hash = item
-            core.storage.upsert_file(rel, content, mtime, raw_emb, centered_emb, file_hash)
+            core.storage.upsert_file(
+                rel,
+                content,
+                mtime,
+                raw_emb,
+                centered_emb,
+                file_hash,
+                embedding_provider=provider_name,
+                embedding_model=model,
+                embedding_dim=expected_dim or len(raw_emb),
+            )
         recenter_profiles(core)
     else:
         core.centerer.corpus_mean = None
@@ -150,12 +188,23 @@ async def index_single_file(core, path: str, content: Optional[str] = None) -> N
 
     file_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
     existing = core.storage.get_file_metadata(rel_path)
-    if existing and existing["hash"] == file_hash:
+    if existing and existing["hash"] == file_hash and _record_matches_embedding_signature(existing, core):
         return
 
     raw = await core.embed.embed([content])
+    provider_name, model, expected_dim = embedding_signature(core)
     mtime = full_path.stat().st_mtime if full_path.exists() else 0
-    core.storage.upsert_file(rel_path, content, mtime, raw[0], raw[0], file_hash)
+    core.storage.upsert_file(
+        rel_path,
+        content,
+        mtime,
+        raw[0],
+        raw[0],
+        file_hash,
+        embedding_provider=provider_name,
+        embedding_model=model,
+        embedding_dim=expected_dim or len(raw[0]),
+    )
     recompute_corpus_mean_and_recenter_index(core)
     await rebuild_bridges(core)
 
@@ -171,7 +220,15 @@ async def rebuild_bridges(core, threshold: Optional[float] = None) -> None:
         return
 
     paths, vectors = zip(*all_emb)
-    arr = np.array(vectors, dtype=float)
+    try:
+        arr = np.array(vectors, dtype=float)
+    except ValueError:
+        core.storage.update_bridges([])
+        logging.warning("Skipped bridges because stored embeddings have mixed dimensions")
+        return
+    if arr.ndim != 2:
+        core.storage.update_bridges([])
+        return
     norms = np.linalg.norm(arr, axis=1, keepdims=True)
     arr_norm = arr / (norms + 1e-9)
     sim = np.dot(arr_norm, arr_norm.T)
@@ -427,7 +484,24 @@ async def search(
         return {"results": [], "profile": profile_name, "explanation": None}
 
     paths, vectors = zip(*all_emb)
-    arr = np.array(vectors, dtype=float)
+    try:
+        arr = np.array(vectors, dtype=float)
+    except ValueError:
+        return {
+            "results": [],
+            "profile": profile_name,
+            "explanation": None,
+            "error": "embedding_dimension_mismatch",
+            "message": "Stored embeddings have mixed dimensions. Run index_all with force=true after changing embedding provider or model.",
+        }
+    if arr.ndim != 2 or arr.shape[1] != q_vec.shape[0]:
+        return {
+            "results": [],
+            "profile": profile_name,
+            "explanation": None,
+            "error": "embedding_dimension_mismatch",
+            "message": "Stored embeddings do not match the current embedding provider. Run index_all with force=true after changing provider or model.",
+        }
     norms = np.linalg.norm(arr, axis=1)
     q_norm = np.linalg.norm(q_vec)
 
@@ -442,12 +516,15 @@ async def search(
         core.storage.increment_profile_usage(profile_name)
 
     if profile_vec is not None:
-        p_norm = np.linalg.norm(profile_vec)
-        if p_norm > 0:
-            p_sim = np.dot(arr, profile_vec) / (norms * p_norm + 1e-9)
-            query_length = len(query.split())
-            weight = 0.3 if query_length > 5 else 0.5
-            sim = (1 - weight) * sim + weight * p_sim
+        if profile_vec.shape[0] != arr.shape[1]:
+            profile_vec = None
+        else:
+            p_norm = np.linalg.norm(profile_vec)
+            if p_norm > 0:
+                p_sim = np.dot(arr, profile_vec) / (norms * p_norm + 1e-9)
+                query_length = len(query.split())
+                weight = 0.3 if query_length > 5 else 0.5
+                sim = (1 - weight) * sim + weight * p_sim
 
     records = {record["path"]: record for record in core.storage.get_all_file_records()}
     lexical = np.zeros(len(paths))

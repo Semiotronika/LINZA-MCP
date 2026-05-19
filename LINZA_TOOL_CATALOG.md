@@ -1,6 +1,8 @@
 # LINZA Tool Catalog
 
-Status: v0 operator catalog, 2026-05-19.
+Status: v0 operator catalog.
+
+Last updated: 2026-05-19.
 
 LINZA has many callable MCP tools because the server grew from several layers:
 indexing, graph inspection, review queues, reports, artifact inbox, and calibr

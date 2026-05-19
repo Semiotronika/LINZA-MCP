@@ -12,7 +12,7 @@ from .events import analyze_inbox
 from .calibr import CALIBR_POLICY, analyze_trace, record_trace, review_calibr
 from .review_queue import learning_examples_from_storage
 from .self_review import apply_review_items, review_next
-from .utils import tokenize
+from .utils import should_ignore_path, tokenize
 
 
 SUPPORTED_AGENT_WORKSPACE_ACTIONS = [
@@ -163,8 +163,7 @@ def _count_markdown_notes(vault_path: Path) -> int:
         return 0
     count = 0
     for path in vault_path.rglob("*.md"):
-        parts = path.relative_to(vault_path).parts
-        if any(part.startswith(".") or part == "LINZA" for part in parts):
+        if should_ignore_path(path, vault_path):
             continue
         count += 1
     return count

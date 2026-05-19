@@ -30,6 +30,12 @@ python -m compileall linza_mcp
 git diff --check
 ```
 
+Run a single regression while iterating:
+
+```powershell
+python -m unittest test_agent_workspace.AgentWorkspaceTests.test_examples_sample_pack_runs_end_to_end
+```
+
 Do not commit generated files, local sidecars, private vault content, or cache
 folders.
 

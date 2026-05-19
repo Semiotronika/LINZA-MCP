@@ -9,10 +9,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 
-LINZA_SCHEMA_VERSION = 1
+LINZA_SCHEMA_VERSION = 2
 
 SCHEMA_MIGRATIONS = (
     (1, "Initial LINZA sidecar schema"),
+    (2, "Track embedding provider metadata for reindex safety"),
 )
 
 
@@ -53,6 +54,9 @@ class Storage:
                 mtime REAL,
                 embedding BLOB,
                 centered_embedding BLOB,
+                embedding_provider TEXT,
+                embedding_model TEXT,
+                embedding_dim INTEGER,
                 hash TEXT,
                 indexed_at REAL
             )
@@ -198,6 +202,8 @@ class Storage:
         for version, description in SCHEMA_MIGRATIONS:
             if version <= current:
                 continue
+            if version == 2:
+                self._ensure_file_embedding_metadata_columns()
             self.conn.execute(
                 """
                 INSERT OR IGNORE INTO schema_migrations (version, description, applied_at)
@@ -207,6 +213,17 @@ class Storage:
             )
             self.conn.execute(f"PRAGMA user_version = {int(version)}")
 
+    def _ensure_file_embedding_metadata_columns(self) -> None:
+        existing = {row["name"] for row in self.conn.execute("PRAGMA table_info(files)")}
+        additions = {
+            "embedding_provider": "TEXT",
+            "embedding_model": "TEXT",
+            "embedding_dim": "INTEGER",
+        }
+        for name, column_type in additions.items():
+            if name not in existing:
+                self.conn.execute(f"ALTER TABLE files ADD COLUMN {name} {column_type}")
+
     def close(self):
         self.conn.close()
 
@@ -214,7 +231,11 @@ class Storage:
 
     def get_file_metadata(self, path: str) -> Optional[Dict]:
         cur = self.conn.execute(
-            "SELECT path, content, embedding, centered_embedding, hash, indexed_at FROM files WHERE path = ?",
+            """
+            SELECT path, content, embedding, centered_embedding, embedding_provider,
+                   embedding_model, embedding_dim, hash, indexed_at
+            FROM files WHERE path = ?
+            """,
             (path,),
         )
         row = cur.fetchone()
@@ -225,6 +246,9 @@ class Storage:
             "content": row["content"],
             "embedding": json.loads(row["embedding"]) if row["embedding"] else None,
             "centered_embedding": json.loads(row["centered_embedding"]) if row["centered_embedding"] else None,
+            "embedding_provider": row["embedding_provider"],
+            "embedding_model": row["embedding_model"],
+            "embedding_dim": row["embedding_dim"],
             "hash": row["hash"],
             "indexed_at": row["indexed_at"],
         }
@@ -237,16 +261,25 @@ class Storage:
         raw_embedding: List[float],
         centered_embedding: List[float],
         file_hash: str,
+        embedding_provider: str | None = None,
+        embedding_model: str | None = None,
+        embedding_dim: int | None = None,
     ):
+        stored_dim = int(embedding_dim) if embedding_dim is not None else len(raw_embedding or [])
         self.conn.execute("""
-            REPLACE INTO files (path, content, mtime, embedding, centered_embedding, hash, indexed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            REPLACE INTO files
+            (path, content, mtime, embedding, centered_embedding, embedding_provider,
+             embedding_model, embedding_dim, hash, indexed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             path,
             content,
             mtime,
             json.dumps(raw_embedding),
             json.dumps(centered_embedding),
+            embedding_provider,
+            embedding_model,
+            stored_dim,
             file_hash,
             now_ts(),
         ))
@@ -261,13 +294,21 @@ class Storage:
         return [row["path"] for row in cur]
 
     def get_all_embeddings(self, use_centered: bool = True) -> List[Tuple[str, List[float]]]:
-        col = "centered_embedding" if use_centered else "embedding"
-        cur = self.conn.execute(f"SELECT path, {col} FROM files WHERE {col} IS NOT NULL")
-        return [(row["path"], json.loads(row[col])) for row in cur]
+        if use_centered:
+            cur = self.conn.execute(
+                "SELECT path, centered_embedding AS vector FROM files WHERE centered_embedding IS NOT NULL"
+            )
+        else:
+            cur = self.conn.execute(
+                "SELECT path, embedding AS vector FROM files WHERE embedding IS NOT NULL"
+            )
+        return [(row["path"], json.loads(row["vector"])) for row in cur]
 
     def get_all_file_records(self) -> List[Dict[str, Any]]:
         cur = self.conn.execute("""
-            SELECT path, content, mtime, embedding, centered_embedding, hash, indexed_at
+            SELECT path, content, mtime, embedding, centered_embedding,
+                   embedding_provider, embedding_model, embedding_dim,
+                   hash, indexed_at
             FROM files ORDER BY path
         """)
         return [
@@ -277,6 +318,9 @@ class Storage:
                 "mtime": row["mtime"],
                 "embedding": json.loads(row["embedding"]) if row["embedding"] else None,
                 "centered_embedding": json.loads(row["centered_embedding"]) if row["centered_embedding"] else None,
+                "embedding_provider": row["embedding_provider"],
+                "embedding_model": row["embedding_model"],
+                "embedding_dim": row["embedding_dim"],
                 "hash": row["hash"],
                 "indexed_at": row["indexed_at"],
             }

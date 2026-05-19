@@ -23,6 +23,41 @@ class OperatorSurfaceTests(OperatorTestCase):
             storage.close()
             tmp.cleanup()
 
+    def test_index_recomputes_when_embedding_signature_changes(self):
+        class FixedEmbeddingProvider:
+            def __init__(self, model: str, vector: list[float]):
+                self.model = model
+                self.vector = vector
+
+            async def embed(self, texts: list[str]) -> list[list[float]]:
+                return [list(self.vector) for _ in texts]
+
+        tmp = tempfile.TemporaryDirectory()
+        vault = Path(tmp.name)
+        (vault / "Alpha.md").write_text("alpha beta gamma", encoding="utf-8")
+        storage = Storage(vault / ".linza" / "linza.db")
+        try:
+            first_core = LinzaCore(vault, storage, FixedEmbeddingProvider("tiny-a", [1.0, 0.0]))
+            asyncio.run(first_core.index_vault())
+            first = storage.get_file_metadata("Alpha.md")
+            self.assertEqual(first["embedding_provider"], "FixedEmbeddingProvider")
+            self.assertEqual(first["embedding_model"], "tiny-a")
+            self.assertEqual(first["embedding_dim"], 2)
+            self.assertEqual(first["embedding"], [1.0, 0.0])
+
+            second_core = LinzaCore(vault, storage, FixedEmbeddingProvider("tiny-b", [0.0, 1.0, 0.0]))
+            asyncio.run(second_core.index_vault(force=False))
+            second = storage.get_file_metadata("Alpha.md")
+            self.assertEqual(second["embedding_model"], "tiny-b")
+            self.assertEqual(second["embedding_dim"], 3)
+            self.assertEqual(second["embedding"], [0.0, 1.0, 0.0])
+
+            search = asyncio.run(second_core.search("alpha", top_k=1))
+            self.assertNotIn("error", search)
+        finally:
+            storage.close()
+            tmp.cleanup()
+
     def test_direct_module_imports_preserve_core_contract(self):
         from linza_mcp.diagnostics import build_bases_plan_markdown as direct_bases_plan
         from linza_mcp.diagnostics import build_diagnostic_markdown as direct_diagnostic_report
@@ -245,8 +280,30 @@ class OperatorSurfaceTests(OperatorTestCase):
             server.storage.close()
             tmp.cleanup()
 
+    def test_cli_version_and_help_do_not_start_server(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+
+        from linza_mcp.cli import main
+        from linza_mcp.compat import __version__
+
+        version_output = StringIO()
+        with self.assertRaises(SystemExit) as version_exit:
+            with redirect_stdout(version_output):
+                main(["--version"])
+        self.assertEqual(version_exit.exception.code, 0)
+        self.assertIn(f"linza-mcp {__version__}", version_output.getvalue())
+
+        help_output = StringIO()
+        with self.assertRaises(SystemExit) as help_exit:
+            with redirect_stdout(help_output):
+                main(["--help"])
+        self.assertEqual(help_exit.exception.code, 0)
+        self.assertIn("Run the LINZA MCP stdio server.", help_output.getvalue())
+
     def test_publishable_agent_pack_docs_are_private_safe(self):
         from linza_mcp.artifacts import ALLOWED_ARTIFACT_SUFFIXES
+        from linza_mcp.compat import __version__
 
         root = Path(__file__).parent
         required = [
@@ -292,6 +349,8 @@ class OperatorSurfaceTests(OperatorTestCase):
         self.assertIn("локальный review-gated sidecar", (root / "README.md").read_text(encoding="utf-8"))
         self.assertIn("Local MCP Server", (root / "README_EN.md").read_text(encoding="utf-8"))
         self.assertIn("mcp-name: io.github.semiotronika/linza-mcp", (root / "README.md").read_text(encoding="utf-8"))
+        self.assertNotIn("NOUZ", (root / "README.md").read_text(encoding="utf-8"))
+        self.assertNotIn("NOUZ", (root / "README_EN.md").read_text(encoding="utf-8"))
         self.assertNotIn("назначаются вручную", (root / "README.md").read_text(encoding="utf-8"))
         self.assertNotIn("coverage", (root / "README.md").read_text(encoding="utf-8"))
         self.assertIn("Obsidian или любой другой", (root / "README.md").read_text(encoding="utf-8"))
@@ -303,20 +362,35 @@ class OperatorSurfaceTests(OperatorTestCase):
         import tomllib
         pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
         self.assertEqual(pyproject["project"]["name"], "linza-mcp")
+        self.assertEqual(pyproject["project"]["version"], __version__)
+        self.assertEqual(pyproject["project"]["readme"], "README_EN.md")
         self.assertEqual(pyproject["project"]["scripts"]["linza-mcp"], "linza_mcp.cli:main")
         self.assertIn("mcp >= 1.0.0", pyproject["project"]["dependencies"])
 
         server_json = json.loads((root / "server.json").read_text(encoding="utf-8"))
         self.assertEqual(server_json["name"], "io.github.semiotronika/linza-mcp")
+        self.assertEqual(server_json["version"], __version__)
         self.assertEqual(server_json["packages"][0]["registryType"], "pypi")
         self.assertEqual(server_json["packages"][0]["identifier"], "linza-mcp")
+        self.assertEqual(server_json["packages"][0]["version"], __version__)
         self.assertEqual(server_json["packages"][0]["transport"]["type"], "stdio")
         env_names = {
             item["name"]
             for item in server_json["packages"][0]["environmentVariables"]
         }
-        self.assertIn("LINZA_VAULT", env_names)
-        self.assertIn("LINZA_EMBED_PROVIDER", env_names)
+        self.assertEqual(
+            env_names,
+            {
+                "LINZA_VAULT",
+                "LINZA_EMBED_PROVIDER",
+                "LINZA_EMBED_URL",
+                "LINZA_EMBED_MODEL",
+                "LINZA_EMBED_KEY",
+                "LINZA_BRIDGE_THRESHOLD",
+                "LINZA_DEFAULT_PROFILE",
+                "LINZA_TOOL_SURFACE",
+            },
+        )
         glama = json.loads((root / "glama.json").read_text(encoding="utf-8"))
         self.assertEqual(glama["$schema"], "https://glama.ai/mcp/schemas/server.json")
         self.assertIn("Semiotronika", glama["maintainers"])
