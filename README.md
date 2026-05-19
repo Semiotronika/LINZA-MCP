@@ -149,7 +149,7 @@ LINZA готова
 
 | Инструмент | Зачем |
 | --- | --- |
-| `agent_workspace` | Единый фасад: карта, ingest, review, grow, connect, memory search, context export, calibr, doctor |
+| `agent_workspace` | Единый фасад: карта, ingest, review, teach, grow, connect, memory search, context export, calibr, doctor |
 | `guide_next_steps` | Показать следующий безопасный шаг |
 | `index_all` | Проиндексировать Markdown-базу в `.linza/linza.db` |
 | `search` | Семантический поиск по заметкам |

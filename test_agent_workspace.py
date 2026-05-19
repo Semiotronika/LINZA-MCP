@@ -354,6 +354,69 @@ class AgentWorkspaceTests(OperatorTestCase):
             storage.close()
             tmp.cleanup()
 
+    def test_agent_workspace_teach_selects_read_only_seed_cards(self):
+        tmp, vault, storage, core = self.make_core()
+        try:
+            (vault / "Product").mkdir()
+            (vault / "Product" / "Overview.md").write_text(
+                "# Overview\n\n"
+                "Project overview for semantic graph, review queue, and local memory.\n"
+                "[[Decision]] records why reviewed batches are safer than direct writes.\n",
+                encoding="utf-8",
+            )
+            (vault / "Product" / "Decision.md").write_text(
+                "# Decision\n\n"
+                "Decision: teach LINZA on a few accepted examples before supervised growth.\n"
+                "Action: keep every first batch in dry-run preview.\n",
+                encoding="utf-8",
+            )
+            (vault / "Product" / "Result.md").write_text(
+                "# Result\n\n"
+                "Result: future agents can propose structure without rewriting note bodies.\n",
+                encoding="utf-8",
+            )
+            before_files = {
+                path.relative_to(vault).as_posix(): path.read_text(encoding="utf-8")
+                for path in vault.rglob("*.md")
+            }
+            before_approved_count = storage.get_approved_item_count()
+
+            result = asyncio.run(core.agent_workspace(
+                action="teach",
+                max_notes=20,
+                max_domains=4,
+                limit=5,
+                include_memory=True,
+            ))
+
+            self.assertEqual(result["tool"], "agent_workspace")
+            self.assertEqual(result["action"], "teach")
+            self.assertEqual(result["status"], "ready")
+            self.assertTrue(result["read_only"])
+            self.assertIn("human_view", result)
+            self.assertIn("teaching", result)
+            cards = result["teaching"]["cards"]
+            self.assertTrue(cards)
+            self.assertLessEqual(len(cards), 5)
+            self.assertTrue(all(card["id"].startswith("rq-") for card in cards))
+            self.assertTrue(all(card["approval"]["arguments"]["dry_run"] for card in cards))
+            self.assertTrue(all(card["evidence"] for card in cards))
+            self.assertTrue(all(card["teaches"] for card in cards))
+            self.assertIn("teach", result["human_view"]["title"].lower())
+            self.assertIn("grow", " ".join(result["human_view"]["next_steps"]).lower())
+            self.assertIn("teach is read-only", result["policy"])
+            self.assertEqual(
+                {
+                    path.relative_to(vault).as_posix(): path.read_text(encoding="utf-8")
+                    for path in vault.rglob("*.md")
+                },
+                before_files,
+            )
+            self.assertEqual(storage.get_approved_item_count(), before_approved_count)
+        finally:
+            storage.close()
+            tmp.cleanup()
+
     def test_agent_workspace_review_filters_process_noise(self):
         tmp, vault, storage, core = self.make_core()
         try:

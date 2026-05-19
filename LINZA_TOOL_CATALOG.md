@@ -16,7 +16,7 @@ These are visible in normal `tools/list`.
 | Tool | Who Uses It | Why It Exists | Writes |
 |---|---|---|---|
 | `guide_next_steps` | Human via agent | Explains the current onboarding stage and next safe action. | No |
-| `agent_workspace` | Agent | Main facade for workspace maps, supervised growth, artifact inbox, trace review, graph connect, memory search, review cards, apply, export, and doctor. | Sidecar; growth/apply actions are dry-run by default |
+| `agent_workspace` | Agent | Main facade for workspace maps, teaching, supervised growth, artifact inbox, trace review, graph connect, memory search, review cards, apply, export, and doctor. | Sidecar; growth/apply actions are dry-run by default |
 | `index_all` | Agent setup | Builds the sidecar index for the vault. | `.linza/linza.db` |
 | `search` | Agent | Finds relevant notes/chunks by semantic and lexical search. | Search history in sidecar |
 | `read_file` | Agent | Reads exact Markdown note text before answering or applying YAML. | No |
@@ -113,6 +113,9 @@ Depth features now live inside the workflow rather than as extra tools:
 
 - `agent_workspace(action="map")` gives a compact read-only workspace snapshot
   for humans and a structured next-action map for agents.
+- `agent_workspace(action="teach")` selects a small read-only batch of seed
+  cards so the human can teach LINZA what good domains, types, hierarchy, and
+  causal links look like.
 - `agent_workspace(action="grow")` lets an agent continue building the knowledge
   base after seed review by selecting cards supported by accepted examples.
 - `analysis_stage` focuses `draft_vault_map` and review queues on one stage.

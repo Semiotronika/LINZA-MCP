@@ -241,7 +241,7 @@ class LinzaMCPServer:
                     "include_memory": {"type": "boolean", "default": False},
                     "include_tool_guide": {"type": "boolean", "default": False},
                 }),
-                _tool("agent_workspace", "One facade for workspace maps, supervised growth, artifact inbox, analysis, review, graph connect, and context export.", {
+                _tool("agent_workspace", "One facade for workspace maps, teaching, supervised growth, artifact inbox, analysis, review, graph connect, and context export.", {
                     "action": {
                         "type": "string",
                         "enum": [
@@ -249,6 +249,7 @@ class LinzaMCPServer:
                             "analyze_inbox",
                             "review_next",
                             "apply_review_items",
+                            "teach",
                             "grow",
                             "connect",
                             "map",

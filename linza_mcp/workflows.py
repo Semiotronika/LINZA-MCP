@@ -10,6 +10,7 @@ from .artifacts import ARTIFACT_POLICY, ingest_artifacts
 from .draft_map import preview_text
 from .events import analyze_inbox
 from .calibr import CALIBR_POLICY, analyze_trace, record_trace, review_calibr
+from .review_queue import learning_examples_from_storage
 from .self_review import apply_review_items, review_next
 from .utils import tokenize
 
@@ -19,6 +20,7 @@ SUPPORTED_AGENT_WORKSPACE_ACTIONS = [
     "analyze_inbox",
     "review_next",
     "apply_review_items",
+    "teach",
     "grow",
     "connect",
     "map",
@@ -29,6 +31,10 @@ SUPPORTED_AGENT_WORKSPACE_ACTIONS = [
     "review_calibr",
     "doctor",
 ]
+
+TEACHABLE_REVIEW_KINDS = ("domain", "material_type", "hierarchy_link", "causal_link", "memory_item")
+TEACH_KIND_ORDER = {kind: index for index, kind in enumerate(TEACHABLE_REVIEW_KINDS)}
+TEACH_PRIORITY_SCORE = {"high": 3, "medium": 2, "low": 1}
 
 
 def _safe_limit(limit: int) -> int:
@@ -41,6 +47,115 @@ def _safe_positive_int(value: Any, default: int, upper: int) -> int:
     except Exception:
         parsed = default
     return max(1, min(upper, parsed))
+
+
+def _teach_item_score(item: dict[str, Any]) -> tuple[int, int, int, int]:
+    priority = TEACH_PRIORITY_SCORE.get(str(item.get("priority", "medium")).lower(), 0)
+    kind_rank = -TEACH_KIND_ORDER.get(str(item.get("kind", "")), len(TEACH_KIND_ORDER))
+    evidence_count = len(item.get("evidence_trace", []) or [])
+    path_count = len(item.get("paths", []) or [])
+    return (priority, kind_rank, evidence_count, path_count)
+
+
+def _teach_item_lessons(item: dict[str, Any]) -> list[str]:
+    kind = str(item.get("kind", ""))
+    arguments = item.get("approval", {}).get("arguments", {})
+    if kind == "domain":
+        return [
+            "what this workspace treats as a domain",
+            f"domain label: {arguments.get('domain_name', '')}",
+        ]
+    if kind == "material_type":
+        return [
+            "what recurring material shapes look like",
+            f"material cluster: {arguments.get('type_id', '')}",
+        ]
+    if kind == "hierarchy_link":
+        return [
+            "which notes can act as parents or hubs",
+            f"hierarchy relation: {arguments.get('relation', 'parent_of')}",
+        ]
+    if kind == "causal_link":
+        return [
+            "what a cause/effect relation looks like here",
+            f"causal relation: {arguments.get('relation', '')}",
+        ]
+    if kind == "memory_item":
+        return [
+            "what should become durable agent memory",
+            f"memory type: {arguments.get('memory_type', '')}",
+        ]
+    return ["how to judge a review card"]
+
+
+def _teach_card(item: dict[str, Any]) -> dict[str, Any]:
+    evidence = [
+        {
+            "label": entry.get("label", ""),
+            "value": entry.get("value"),
+            "weight": entry.get("weight", "medium"),
+        }
+        for entry in (item.get("evidence_trace", []) or [])[:5]
+    ]
+    return {
+        "id": item.get("id", ""),
+        "kind": item.get("kind", ""),
+        "priority": item.get("priority", "medium"),
+        "title": item.get("title", ""),
+        "why": item.get("why", ""),
+        "paths": item.get("paths", [])[:8],
+        "evidence": evidence,
+        "teaches": [lesson for lesson in _teach_item_lessons(item) if str(lesson).strip()],
+        "approval": item.get("approval", {}),
+    }
+
+
+def _teach_human_view(cards: list[dict[str, Any]], learning: dict[str, Any]) -> dict[str, Any]:
+    total_examples = int(learning.get("total_examples", 0) or 0)
+    if cards:
+        summary = (
+            "Review a few high-signal seed cards. Accepted cards become local examples "
+            "for later supervised growth."
+        )
+    else:
+        summary = "LINZA did not find teachable cards yet. Index or import more material first."
+    return {
+        "title": "Teach LINZA on seed examples",
+        "summary": summary,
+        "sections": [
+            {
+                "title": "Seed cards",
+                "summary": f"{len(cards)} read-only cards selected for teaching.",
+                "items": [
+                    f"{card['id']} | {card['kind']} | {card['title']}"
+                    for card in cards
+                ],
+            },
+            {
+                "title": "Current learning",
+                "summary": f"{total_examples} accepted examples are already stored locally.",
+                "items": [
+                    f"{key}: {value}"
+                    for key, value in sorted((learning.get("counts", {}) or {}).items())
+                ],
+            },
+            {
+                "title": "Safety",
+                "summary": "Teach mode only selects cards; it does not apply or write.",
+                "items": [
+                    "teach is read-only",
+                    "approval payloads stay dry-run",
+                    "accept exact rq-* IDs before grow",
+                    "source note bodies are never rewritten",
+                ],
+            },
+        ],
+        "next_steps": [
+            "Accept three to five exact rq-* cards that look right.",
+            "Run agent_workspace(action=\"grow\", mode=\"assisted\", dry_run=true).",
+            "Apply only a small reviewed batch after reading the grow preview.",
+        ],
+    }
 
 
 def _count_markdown_notes(vault_path: Path) -> int:
@@ -641,6 +756,55 @@ async def grow_workspace(
     }
 
 
+async def teach_workspace(
+    core,
+    limit: int = 5,
+    max_notes: int = 120,
+    max_domains: int = 8,
+    include_memory: bool = False,
+) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    queue = await core.build_review_apply_queue(
+        max_notes=_safe_positive_int(max_notes, 120, 1000),
+        max_domains=_safe_positive_int(max_domains, 8, 50),
+        limit=max(safe_limit * 4, safe_limit),
+        include_memory=include_memory,
+    )
+    candidates = [
+        item for item in queue.get("items", [])
+        if item.get("kind") in TEACHABLE_REVIEW_KINDS
+        and item.get("approval", {}).get("arguments", {}).get("dry_run") is True
+    ]
+    selected = sorted(candidates, key=_teach_item_score, reverse=True)[:safe_limit]
+    cards = [_teach_card(item) for item in selected]
+    learning = learning_examples_from_storage(core.storage)
+    return {
+        "tool": "agent_workspace",
+        "action": "teach",
+        "status": "ready" if cards else "needs_material",
+        "read_only": True,
+        "human_view": _teach_human_view(cards, learning),
+        "teaching": {
+            "cards": cards,
+            "candidate_count": len(candidates),
+            "selection_policy": [
+                "prefer high-priority cards",
+                "cover domains, material types, hierarchy, causal links, and optional memory",
+                "return dry-run approval payloads only",
+            ],
+        },
+        "learning": learning,
+        "queue_summary": queue.get("summary", {}),
+        "policy": [
+            "teach is read-only",
+            "teach does not approve or apply cards",
+            "approval payloads keep dry_run=true",
+            "accepted examples are required before grow can apply learned batches",
+            "source note bodies are not rewritten",
+        ],
+    }
+
+
 async def connect_nodes(
     core,
     source: str = "",
@@ -772,6 +936,14 @@ async def agent_workspace(
             batch_id=batch_id,
             trace_id=trace_id,
         )
+    if normalized_action == "teach":
+        return await teach_workspace(
+            core,
+            limit=safe_limit,
+            max_notes=_kwargs.get("max_notes", 120),
+            max_domains=_kwargs.get("max_domains", 8),
+            include_memory=bool(_kwargs.get("include_memory", False)),
+        )
     if normalized_action == "grow":
         return await grow_workspace(
             core,
@@ -828,6 +1000,7 @@ __all__ = [
     "doctor",
     "export_context",
     "grow_workspace",
+    "teach_workspace",
     "search_memory",
     "workspace_map",
 ]

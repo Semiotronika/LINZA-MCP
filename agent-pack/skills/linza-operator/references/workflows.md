@@ -29,6 +29,10 @@ should not be applied as YAML.
 
 ## Supervised Growth After Seed Review
 
+If there are not enough accepted examples, run `agent_workspace(action="teach")`
+first. Show the read-only seed cards, ask the human to accept exact `rq-*`
+cards, and treat those accepted cards as local teaching examples.
+
 After the human accepts a few seed examples, use
 `agent_workspace(action="grow", mode="assisted")` to continue building the
 knowledge base.

@@ -179,8 +179,8 @@ TOOL_GUIDE = {
         "write_scope": "none",
     },
     "agent_workspace": {
-        "when": "Default facade for workspace maps, supervised growth, artifact inbox, trace review, graph connect, memory search, and context export.",
-        "does": "Routes typed actions such as map, grow, ingest_artifacts, analyze_inbox, review_next, apply_review_items, connect, search_memory, export_context, calibr, and doctor.",
+        "when": "Default facade for workspace maps, teaching, supervised growth, artifact inbox, trace review, graph connect, memory search, and context export.",
+        "does": "Routes typed actions such as map, teach, grow, ingest_artifacts, analyze_inbox, review_next, apply_review_items, connect, search_memory, export_context, calibr, and doctor.",
         "default_mode": "mixed; read-only actions stay read-only and apply actions dry-run by default",
         "write_scope": ".linza sidecar for raw artifacts, traces, chunks, approved items, and audit events",
     },

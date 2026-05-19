@@ -158,7 +158,7 @@ from `agent_workspace` or `guide_next_steps`, not from a raw tool list.
 
 | Tool | Purpose |
 | --- | --- |
-| `agent_workspace` | One facade for map, ingest, review, grow, connect, memory search, context export, calibr, and doctor |
+| `agent_workspace` | One facade for map, ingest, review, teach, grow, connect, memory search, context export, calibr, and doctor |
 | `guide_next_steps` | Show the next safe human-readable step |
 | `index_all` | Index the Markdown workspace into `.linza/linza.db` |
 | `search` | Semantic search across notes |

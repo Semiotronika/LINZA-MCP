@@ -1,6 +1,6 @@
 ---
 name: linza-operator
-description: Use when operating LINZA MCP as a local-first agent workspace. Guides agents through doctor checks, guide_next_steps, agent_workspace actions, review queues, dry-run apply gates, artifact safety, calibr trace review, and context export without exposing raw tool lists to humans.
+description: Use when operating LINZA MCP as a local-first agent workspace. Guides agents through doctor checks, guide_next_steps, agent_workspace actions, teach/grow review loops, dry-run apply gates, artifact safety, calibr trace review, and context export without exposing raw tool lists to humans.
 ---
 
 # LINZA Operator
@@ -21,8 +21,8 @@ Use these first:
 
 1. `agent_workspace(action="doctor")` for readiness and safety status.
 2. `guide_next_steps` for the current onboarding/review stage.
-3. `agent_workspace` for workspace maps, supervised growth, artifacts, trace
-   review, memory search, review cards, graph connect, and context export.
+3. `agent_workspace` for workspace maps, teaching, supervised growth, artifacts,
+   trace review, memory search, review cards, graph connect, and context export.
 
 When the human asks "what is here", "where should we start", or "what should
 the agent do next", use `agent_workspace(action="map")` first. Present the
@@ -31,6 +31,10 @@ human view, then use the agent view only to choose the next precise action.
 When the human asks "what connects X and Y", use
 `agent_workspace(action="connect", source="X", target="Y")` first. Present the
 route and confidence labels, then read exact source files only if needed.
+
+When the human wants the agent to learn the base style before continuing, use
+`agent_workspace(action="teach")`. Show the small read-only seed batch and ask
+the human to accept exact `rq-*` cards that look right.
 
 When the human has accepted initial seed domains/material types/hierarchy and
 wants the agent to continue building the base, use
