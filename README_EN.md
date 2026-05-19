@@ -143,6 +143,25 @@ Check LINZA with agent_workspace(action="doctor").
 Index the folder and show the first 3-5 review cards.
 ```
 
+### Optional Docker Run
+
+Docker is not required, but the repository includes a small image for isolated
+stdio runs:
+
+```powershell
+docker build -t linza-mcp .
+docker run --rm -i `
+  -v /absolute/path/to/workspace-or-vault:/data/vault `
+  -e LINZA_EMBED_PROVIDER=lmstudio `
+  -e LINZA_EMBED_URL=http://host.docker.internal:1234/v1 `
+  -e LINZA_EMBED_MODEL=your-embedding-model-name `
+  linza-mcp
+```
+
+Use `host.docker.internal` only when the embedding server runs on the host
+machine. Otherwise pass the embedding API URL that is reachable from inside the
+container.
+
 ---
 
 ## Embeddings
@@ -253,6 +272,13 @@ LINZA is a local review-gated sidecar:
 - hierarchy, causal links, memory, calibr lessons, and approvals stay in the sidecar until the human asks for export.
 
 LINZA is not a browser automation server, cloud memory, or an autopilot that silently rewrites rules, skills, memory, or notes.
+
+## Stability
+
+`0.1.0` is an alpha MVP. The safety contract is meant to be stable: source note
+bodies are not rewritten by indexing, artifact ingest, search, map, or grow
+preview. Low-level advanced tools and internal module boundaries may still
+change while the server is being polished.
 
 ---
 

@@ -11,6 +11,7 @@ and exact IDs.
 
 ```powershell
 python -m pip install -e ".[dev]"
+python -m ruff check .
 python -m unittest
 ```
 
@@ -26,6 +27,7 @@ Run:
 
 ```powershell
 python -B -m unittest
+python -m ruff check .
 python -m compileall linza_mcp
 git diff --check
 ```

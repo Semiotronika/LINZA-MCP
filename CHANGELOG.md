@@ -16,12 +16,16 @@ Initial public preparation of LINZA.
 - Synthetic private-safe example pack and regression tests.
 - PyPI packaging metadata, official MCP Registry `server.json`, and Glama
   ownership metadata.
+- Optional Dockerfile for isolated stdio runs.
+- `py.typed` marker and a conservative Ruff lint configuration for development.
 
 ### Changed
 
 - LM Studio is now the default embedding setup for real semantic work.
 - Removed the old no-model embedding fallback from production code and public
   documentation. Tests use their own deterministic fake provider.
+- `guide_next_steps` can render the human-facing onboarding view in Russian or
+  English via `language` / `LINZA_LANGUAGE`.
 
 ### Security
 

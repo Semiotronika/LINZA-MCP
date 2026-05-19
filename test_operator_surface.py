@@ -334,6 +334,8 @@ class OperatorSurfaceTests(OperatorTestCase):
             root / "README_EN.md",
             root / "pyproject.toml",
             root / "MANIFEST.in",
+            root / "Dockerfile",
+            root / ".dockerignore",
             root / "LICENSE",
             root / "SECURITY.md",
             root / "CHANGELOG.md",
@@ -342,6 +344,7 @@ class OperatorSurfaceTests(OperatorTestCase):
             root / "glama.json",
             root / "LINZA_TOOL_CATALOG.md",
             root / "LINZA_TOOL_GUIDE.md",
+            root / "linza_mcp" / "py.typed",
             root / "scripts" / "README.md",
             root / "agent-pack" / "README.md",
             root / "agent-pack" / "skills" / "linza-operator" / "SKILL.md",
@@ -405,13 +408,22 @@ class OperatorSurfaceTests(OperatorTestCase):
         self.assertEqual(pyproject["project"]["scripts"]["linza-mcp"], "linza_mcp.cli:main")
         self.assertIn("mcp >= 1.0.0", pyproject["project"]["dependencies"])
         self.assertIn("defusedxml >= 0.7", pyproject["project"]["dependencies"])
+        self.assertIn("ruff >= 0.8", pyproject["project"]["optional-dependencies"]["dev"])
+        self.assertEqual(pyproject["tool"]["setuptools"]["package-data"]["linza_mcp"], ["py.typed"])
+        self.assertEqual(pyproject["tool"]["ruff"]["target-version"], "py310")
 
         manifest = (root / "MANIFEST.in").read_text(encoding="utf-8")
+        self.assertIn("include Dockerfile", manifest)
+        self.assertIn("include .dockerignore", manifest)
         self.assertIn("include CONTRIBUTING.md", manifest)
         self.assertIn("include LINZA_TOOL_GUIDE.md", manifest)
+        self.assertIn("recursive-include linza_mcp py.typed", manifest)
+
+        ci = (root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        self.assertIn("python -m ruff check .", ci)
 
         gitignore = (root / ".gitignore").read_text(encoding="utf-8")
-        for ignored in [".env", ".env.*", ".venv/", "venv/"]:
+        for ignored in [".env", ".env.*", ".venv/", "venv/", ".ruff_cache/"]:
             self.assertIn(ignored, gitignore)
 
         server_json = json.loads((root / "server.json").read_text(encoding="utf-8"))

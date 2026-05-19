@@ -132,6 +132,25 @@ linza-mcp --version
 Проиндексируй папку и покажи первые 3-5 review-карточек.
 ```
 
+### Опциональный запуск через Docker
+
+Docker не обязателен, но в репозитории есть маленький образ для изолированного
+stdio-запуска:
+
+```powershell
+docker build -t linza-mcp .
+docker run --rm -i `
+  -v /absolute/path/to/workspace-or-vault:/data/vault `
+  -e LINZA_EMBED_PROVIDER=lmstudio `
+  -e LINZA_EMBED_URL=http://host.docker.internal:1234/v1 `
+  -e LINZA_EMBED_MODEL=your-embedding-model-name `
+  linza-mcp
+```
+
+`host.docker.internal` подходит, когда embedding-сервер запущен на хосте.
+Если модель доступна по другому адресу, передайте URL, который виден из
+контейнера.
+
 ---
 
 ## Про эмбеддинги
@@ -240,6 +259,13 @@ LINZA проектируется как локальный review-gated sidecar:
 - причинные связи, иерархия, память, calibr-уроки и approvals живут в sidecar, пока человек не попросит экспорт.
 
 LINZA не browser automation server, не облачная память и не автопилот, который сам переписывает правила, skills, память или заметки.
+
+## Стабильность
+
+`0.1.0` — alpha MVP. Контракт безопасности уже считается основным: indexing,
+artifact ingest, search, map и grow preview не переписывают тела исходных
+заметок. Низкоуровневые advanced tools и внутренние границы модулей еще могут
+меняться, пока сервер полируется.
 
 ---
 
