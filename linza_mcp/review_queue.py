@@ -1166,14 +1166,19 @@ def _learning_match_reasons(item: Dict[str, Any], examples: Dict[str, Any], mode
     memory_types = set(examples.get("memory_types", []))
     counts = examples.get("counts", {})
     rules = examples.get("rules", {}) if isinstance(examples.get("rules", {}), dict) else {}
+    material_type_names = set(rules.get("material_type_names", []))
     hierarchy_relations = set(rules.get("hierarchy_relations", []))
     causal_relations = set(rules.get("causal_relations", []))
+    learned_prefixes = set(rules.get("path_prefixes", []))
+    shared_prefixes = sorted(approved_path_prefixes(str(item_type), arguments) & learned_prefixes)
     reasons: list[str] = []
 
     if item_type == "role":
         role = str(arguments.get("role", ""))
         if role in roles and priority in {"high", "medium"}:
             reasons.append(f"accepted_role_example:{role}")
+        if role in material_type_names and priority in {"high", "medium"}:
+            reasons.append(f"accepted_material_type_name:{role}")
     if item_type == "domain":
         domain_name = str(arguments.get("domain_name", ""))
         if domain_name in domains:
@@ -1187,24 +1192,28 @@ def _learning_match_reasons(item: Dict[str, Any], examples: Dict[str, Any], mode
             reasons.append(f"accepted_hierarchy_relation:{relation}")
         if counts.get("hierarchy_link", 0) >= 1 and (not domain_name or domain_name in domains or domain_name in hierarchy_domains):
             reasons.append("accepted_hierarchy_example")
+        if relation in hierarchy_relations and counts.get("hierarchy_link", 0) >= 2 and shared_prefixes and priority in {"high", "medium"}:
+            if f"accepted_hierarchy_relation:{relation}" not in reasons:
+                reasons.append(f"accepted_hierarchy_relation:{relation}")
+            reasons.append(f"accepted_hierarchy_prefix:{shared_prefixes[0]}")
         if mode == "autopilot" and counts.get("hierarchy_link", 0) >= 1:
             reasons.append("autopilot_hierarchy_after_examples")
     if item_type == "causal_link":
         relation = str(arguments.get("relation", ""))
         if relation and relation in causal_relations:
             reasons.append(f"accepted_causal_relation:{relation}")
+        if relation and relation in causal_relations and shared_prefixes:
+            reasons.append(f"accepted_causal_prefix:{shared_prefixes[0]}")
         if mode == "autopilot" and counts.get("causal_link", 0) >= 1 and (not relation or relation in relations):
             reasons.append("autopilot_causal_after_examples")
     if item_type == "memory_item":
         memory_type = str(arguments.get("memory_type", ""))
+        if mode == "assisted" and memory_type in memory_types and counts.get("memory_item", 0) >= 2 and shared_prefixes and priority in {"high", "medium"}:
+            reasons.append(f"accepted_memory_type:{memory_type}")
+            reasons.append(f"accepted_memory_prefix:{shared_prefixes[0]}")
         if mode == "autopilot" and memory_type in memory_types:
             reasons.append(f"autopilot_memory_type_example:{memory_type}")
     return reasons
-
-
-def _learning_match_reason(item: Dict[str, Any], examples: Dict[str, Any], mode: str) -> str | None:
-    reasons = _learning_match_reasons(item, examples, mode)
-    return reasons[0] if reasons else None
 
 
 def select_learned_queue_matches(
@@ -1254,15 +1263,21 @@ async def apply_learned_review_queue(
             "error": "mode must be review, assisted, or autopilot",
             "supported_modes": ["review", "assisted", "autopilot"],
         }
+    batch_limit = max(1, int(limit))
+    queue_scan_limit = max(batch_limit, min(200, max(40, batch_limit * 4)))
     queue = await core.build_review_apply_queue(
         max_notes=max_notes,
         max_domains=max_domains,
-        limit=limit,
+        limit=queue_scan_limit,
         include_memory=include_memory,
     )
     examples = learning_examples_from_storage(core.storage)
-    selected_matches = select_learned_queue_matches(queue.get("items", []), examples, normalized_mode)
-    selected_ids = list(selected_matches)
+    all_selected_matches = select_learned_queue_matches(queue.get("items", []), examples, normalized_mode)
+    selected_ids = list(all_selected_matches)[:batch_limit]
+    selected_matches = {
+        item_id: all_selected_matches[item_id]
+        for item_id in selected_ids
+    }
     response: Dict[str, Any] = {
         "tool": "apply_learned_review_queue",
         "status": "review" if normalized_mode == "review" else ("no_learned_matches" if not selected_ids else ("preview" if dry_run else "applied")),
@@ -1275,6 +1290,11 @@ async def apply_learned_review_queue(
         ],
         "learning": examples,
         "queue_summary": queue.get("summary", {}),
+        "selection_window": {
+            "batch_limit": batch_limit,
+            "queue_scan_limit": queue_scan_limit,
+            "matched_before_batch_limit": len(all_selected_matches),
+        },
         "policy": [
             "review mode never selects or applies items automatically.",
             "assisted mode selects only cards supported by accepted examples and local learning rules.",
@@ -1288,7 +1308,7 @@ async def apply_learned_review_queue(
         item_ids=selected_ids,
         max_notes=max_notes,
         max_domains=max_domains,
-        limit=limit,
+        limit=queue_scan_limit,
         dry_run=dry_run,
         allow_overwrite=allow_overwrite,
         include_memory=include_memory,

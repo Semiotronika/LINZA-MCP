@@ -554,6 +554,97 @@ class ReviewQueueTests(OperatorTestCase):
             storage.close()
             tmp.cleanup()
 
+    def test_assisted_learning_uses_sidecar_prefix_and_memory_rules(self):
+        from linza_mcp.review_queue import (
+            learning_examples_from_storage,
+            select_learned_queue_matches,
+        )
+
+        tmp, vault, storage, core = self.make_core()
+        try:
+            storage.record_approved_item("hierarchy_link", {
+                "parent_path": "Product/Overview.md",
+                "child_paths": ["Product/Decision.md"],
+                "domain_name": "Product",
+                "relation": "parent_of",
+            })
+            storage.record_approved_item("hierarchy_link", {
+                "parent_path": "Product/Research.md",
+                "child_paths": ["Product/Experiment.md"],
+                "domain_name": "Product Research",
+                "relation": "parent_of",
+            })
+            storage.record_approved_item("memory_item", {
+                "source_path": "Product/Decision.md",
+                "memory_type": "episodic",
+                "summary": "The user accepted sidecar-only learning examples.",
+            })
+            storage.record_approved_item("memory_item", {
+                "source_path": "Product/Experiment.md",
+                "memory_type": "semantic",
+                "summary": "The workspace keeps durable conclusions behind review.",
+            })
+
+            queue_items = [
+                {
+                    "id": "rq-hierarchy-product-prefix",
+                    "kind": "hierarchy_link",
+                    "priority": "medium",
+                    "approval": {"arguments": {
+                        "item_type": "hierarchy_link",
+                        "relation": "parent_of",
+                        "domain_name": "New Product Area",
+                        "parent_path": "Product/New Overview.md",
+                        "child_paths": ["Product/New Result.md"],
+                    }},
+                },
+                {
+                    "id": "rq-hierarchy-other-prefix",
+                    "kind": "hierarchy_link",
+                    "priority": "medium",
+                    "approval": {"arguments": {
+                        "item_type": "hierarchy_link",
+                        "relation": "parent_of",
+                        "domain_name": "Other Area",
+                        "parent_path": "Other/Overview.md",
+                        "child_paths": ["Other/Result.md"],
+                    }},
+                },
+                {
+                    "id": "rq-memory-product-prefix",
+                    "kind": "memory_item",
+                    "priority": "high",
+                    "approval": {"arguments": {
+                        "item_type": "memory_item",
+                        "memory_type": "episodic",
+                        "source_path": "Product/Session.md",
+                        "summary": "A similar reviewed event should become memory.",
+                    }},
+                },
+                {
+                    "id": "rq-memory-other-prefix",
+                    "kind": "memory_item",
+                    "priority": "high",
+                    "approval": {"arguments": {
+                        "item_type": "memory_item",
+                        "memory_type": "episodic",
+                        "source_path": "Other/Session.md",
+                        "summary": "A similar event outside the learned prefix stays manual.",
+                    }},
+                },
+            ]
+
+            examples = learning_examples_from_storage(storage)
+            matches = select_learned_queue_matches(queue_items, examples, mode="assisted")
+
+            self.assertIn("accepted_hierarchy_prefix:Product", matches["rq-hierarchy-product-prefix"])
+            self.assertIn("accepted_memory_type:episodic", matches["rq-memory-product-prefix"])
+            self.assertNotIn("rq-hierarchy-other-prefix", matches)
+            self.assertNotIn("rq-memory-other-prefix", matches)
+        finally:
+            storage.close()
+            tmp.cleanup()
+
     def test_apply_learned_review_queue_dry_run_selects_only_after_examples(self):
         tmp, vault, storage, core = self.make_core()
         try:
@@ -599,6 +690,88 @@ class ReviewQueueTests(OperatorTestCase):
             self.assertTrue(learned["dry_run"])
             self.assertEqual(storage.list_approved_items("role")[0]["payload"]["role"], "логи")
             self.assertNotIn("apply_result", no_examples)
+        finally:
+            storage.close()
+            tmp.cleanup()
+
+    def test_apply_learned_review_queue_scans_past_requested_batch_limit(self):
+        from linza_mcp.review_queue import apply_learned_review_queue
+
+        class FakeCore:
+            def __init__(self, storage):
+                self.storage = storage
+                self.queue_limit_seen = None
+                self.approved_ids = []
+                self.items = [
+                    {
+                        "id": f"rq-domain-noise-{index}",
+                        "kind": "domain",
+                        "priority": "medium",
+                        "approval": {"arguments": {
+                            "item_type": "domain",
+                            "domain_name": f"Other {index}",
+                        }},
+                    }
+                    for index in range(30)
+                ]
+                self.items.append({
+                    "id": "rq-memory-late-match",
+                    "kind": "memory_item",
+                    "priority": "high",
+                    "approval": {"arguments": {
+                        "item_type": "memory_item",
+                        "memory_type": "episodic",
+                        "source_path": "Product/Session.md",
+                        "summary": "A late matching card should still enter the small preview batch.",
+                    }},
+                })
+
+            async def build_review_apply_queue(self, **kwargs):
+                self.queue_limit_seen = kwargs.get("limit")
+                return {
+                    "items": self.items[: self.queue_limit_seen],
+                    "summary": {"items": min(self.queue_limit_seen, len(self.items))},
+                }
+
+            async def approve_review_queue_items(self, item_ids, **kwargs):
+                self.approved_ids = list(item_ids)
+                return {
+                    "status": "preview",
+                    "written_paths": [],
+                    "summary": {
+                        "requested": len(item_ids),
+                        "matched": len(item_ids),
+                        "applied": 0,
+                        "previewed": len(item_ids),
+                    },
+                }
+
+        tmp, vault, storage, core = self.make_core()
+        try:
+            storage.record_approved_item("memory_item", {
+                "source_path": "Product/Decision.md",
+                "memory_type": "episodic",
+                "summary": "Accepted memory example one.",
+            })
+            storage.record_approved_item("memory_item", {
+                "source_path": "Product/Result.md",
+                "memory_type": "semantic",
+                "summary": "Accepted memory example two.",
+            })
+            fake = FakeCore(storage)
+
+            result = asyncio.run(apply_learned_review_queue(
+                fake,
+                mode="assisted",
+                limit=10,
+                dry_run=True,
+                include_memory=True,
+            ))
+
+            self.assertGreater(fake.queue_limit_seen, 10)
+            self.assertEqual(result["selected_ids"], ["rq-memory-late-match"])
+            self.assertEqual(fake.approved_ids, ["rq-memory-late-match"])
+            self.assertEqual(result["written_paths"], [])
         finally:
             storage.close()
             tmp.cleanup()
