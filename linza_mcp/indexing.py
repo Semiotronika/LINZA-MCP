@@ -7,6 +7,7 @@ import hashlib
 import logging
 import math
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -45,6 +46,148 @@ def _record_matches_embedding_signature(record: dict[str, Any], core) -> bool:
     if stored_dim is not None and len(record["embedding"]) != int(stored_dim):
         return False
     return True
+
+
+def embedding_index_status(core, sample_limit: int = 20) -> dict[str, Any]:
+    """Report whether stored vectors match the current embedding provider."""
+    provider_name, model, expected_dim = embedding_signature(core)
+    expected = {"provider": provider_name, "model": model, "dim": expected_dim}
+    records = [
+        record
+        for record in core.storage.get_all_file_records()
+        if record.get("embedding") is not None
+    ]
+    if not records:
+        return {
+            "status": "empty",
+            "message": "No indexed embeddings are stored yet.",
+            "expected": expected,
+            "indexed_embeddings": 0,
+            "mismatch_count": 0,
+            "mismatches": [],
+            "observed_signatures": [],
+        }
+
+    mismatches: list[dict[str, Any]] = []
+    signature_counts: Counter[tuple[str, str, int | None]] = Counter()
+    for record in records:
+        vector = record.get("embedding") or []
+        stored_dim = record.get("embedding_dim")
+        actual_dim = len(vector)
+        observed_dim = int(stored_dim) if stored_dim is not None else actual_dim
+        signature = (
+            str(record.get("embedding_provider") or ""),
+            str(record.get("embedding_model") or ""),
+            observed_dim,
+        )
+        signature_counts[signature] += 1
+
+        reasons: list[str] = []
+        if signature[0] != provider_name:
+            reasons.append("provider")
+        if signature[1] != model:
+            reasons.append("model")
+        if expected_dim is not None and observed_dim != expected_dim:
+            reasons.append("dimension")
+        if stored_dim is not None and actual_dim != int(stored_dim):
+            reasons.append("stored_dimension")
+        if reasons:
+            mismatches.append({
+                "path": record["path"],
+                "reasons": reasons,
+                "stored": {
+                    "provider": signature[0],
+                    "model": signature[1],
+                    "dim": observed_dim,
+                    "actual_dim": actual_dim,
+                },
+            })
+
+    observed = [
+        {"provider": provider, "model": observed_model, "dim": dim, "count": count}
+        for (provider, observed_model, dim), count in signature_counts.most_common()
+    ]
+    if mismatches or len(signature_counts) > 1:
+        return {
+            "status": "needs_reindex",
+            "message": "Stored embeddings do not match one embedding provider/model signature. Run index_all with force=true.",
+            "expected": expected,
+            "indexed_embeddings": len(records),
+            "mismatch_count": len(mismatches),
+            "mismatches": mismatches[:sample_limit],
+            "observed_signatures": observed,
+        }
+
+    return {
+        "status": "ok",
+        "message": "Stored embeddings match the current provider/model signature.",
+        "expected": expected,
+        "indexed_embeddings": len(records),
+        "mismatch_count": 0,
+        "mismatches": [],
+        "observed_signatures": observed,
+    }
+
+
+def vault_sync_status(core, sample_limit: int = 20) -> dict[str, Any]:
+    """Return a quick source-folder vs sidecar freshness check."""
+    vault = core.storage.vault_path
+    indexed = {record["path"]: record for record in core.storage.get_all_file_records()}
+    current: dict[str, Path] = {}
+    for path in vault.glob("**/*.md"):
+        if should_ignore_path(path, vault):
+            continue
+        rel = str(path.relative_to(vault)).replace("\\", "/")
+        current[rel] = path
+
+    added = sorted(set(current) - set(indexed))
+    removed = sorted(set(indexed) - set(current))
+    changed: list[str] = []
+    hash_checked = 0
+    for rel in sorted(set(current) & set(indexed)):
+        record = indexed[rel]
+        stored_hash = str(record.get("hash") or "")
+        if not stored_hash:
+            changed.append(rel)
+            continue
+        current_mtime = current[rel].stat().st_mtime
+        stored_mtime = float(record.get("mtime") or 0)
+        if abs(current_mtime - stored_mtime) <= 1e-6:
+            continue
+        content = current[rel].read_text(encoding="utf-8", errors="replace")
+        hash_checked += 1
+        file_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        if file_hash != stored_hash:
+            changed.append(rel)
+
+    stale_count = len(added) + len(removed) + len(changed)
+    if not current and not indexed:
+        status = "empty"
+        message = "No Markdown files are present and no index exists."
+    elif current and not indexed:
+        status = "needs_index"
+        message = "Markdown files exist, but the sidecar has not indexed them yet."
+    elif stale_count:
+        status = "stale"
+        message = "The Markdown folder changed after the last index. Run index_all before relying on graph/search results."
+    else:
+        status = "ok"
+        message = "The sidecar index matches the current Markdown folder."
+
+    return {
+        "status": status,
+        "message": message,
+        "source_markdown_files": len(current),
+        "indexed_files": len(indexed),
+        "stale_count": stale_count,
+        "hash_checked_files": hash_checked,
+        "added": added[:sample_limit],
+        "changed": changed[:sample_limit],
+        "removed": removed[:sample_limit],
+        "added_count": len(added),
+        "changed_count": len(changed),
+        "removed_count": len(removed),
+    }
 
 
 async def compute_embeddings(core, texts: List[str]) -> Tuple[List[List[float]], List[List[float]]]:
@@ -177,6 +320,12 @@ async def index_vault(core, force: bool = False) -> None:
 async def index_single_file(core, path: str, content: Optional[str] = None) -> None:
     """Incremental index of one file. Recomputes corpus mean for current indexed files."""
     rel_path, full_path = safe_vault_path(core.storage.vault_path, path)
+    index_status = embedding_index_status(core)
+    if index_status["status"] == "needs_reindex":
+        raise RuntimeError(
+            "Stored embeddings use a different provider/model signature. "
+            "Run index_all with force=true before indexing a single file."
+        )
 
     if content is None:
         if not full_path.exists():
@@ -214,9 +363,26 @@ async def rebuild_bridges(core, threshold: Optional[float] = None) -> None:
     if threshold is None:
         threshold = core.config.get("bridge_threshold", 0.55)
 
+    index_status = embedding_index_status(core)
+    if index_status["status"] == "needs_reindex":
+        core.storage.update_bridges([])
+        logging.warning("Skipped bridges because stored embeddings need a full reindex")
+        return
+
     all_emb = core.storage.get_all_embeddings(use_centered=True)
     if len(all_emb) < 2:
         core.storage.update_bridges([])
+        return
+
+    pair_count = (len(all_emb) * (len(all_emb) - 1)) // 2
+    max_pairs = int(core.config.get("max_bridge_pairs", 1000000) or 0)
+    if max_pairs > 0 and pair_count > max_pairs:
+        core.storage.update_bridges([])
+        logging.warning(
+            "Skipped bridges for %s pairs; exceeds LINZA_MAX_BRIDGE_PAIRS=%s",
+            pair_count,
+            max_pairs,
+        )
         return
 
     paths, vectors = zip(*all_emb)
@@ -482,6 +648,16 @@ async def search(
     all_emb = core.storage.get_all_embeddings(use_centered=True)
     if not all_emb:
         return {"results": [], "profile": profile_name, "explanation": None}
+    index_status = embedding_index_status(core)
+    if index_status["status"] == "needs_reindex":
+        return {
+            "results": [],
+            "profile": profile_name,
+            "explanation": None,
+            "error": "embedding_signature_mismatch",
+            "message": index_status["message"],
+            "embedding_index": index_status,
+        }
 
     paths, vectors = zip(*all_emb)
     try:
@@ -726,6 +902,8 @@ __all__ = [
     "classify_relation_candidate",
     "compute_embeddings",
     "create_profile",
+    "embedding_index_status",
+    "embedding_signature",
     "file_features",
     "get_profile_vector",
     "get_snippet",
@@ -740,4 +918,5 @@ __all__ = [
     "search",
     "similarity_confidence",
     "suggest_links",
+    "vault_sync_status",
 ]

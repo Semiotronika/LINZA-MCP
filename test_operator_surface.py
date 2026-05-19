@@ -397,7 +397,12 @@ class OperatorSurfaceTests(OperatorTestCase):
         removed_provider_name = "hash"
         self.assertNotIn(f"`{removed_provider_name}`", public_embedding_docs)
         self.assertNotIn(f"LINZA_EMBED_PROVIDER={removed_provider_name}", public_embedding_docs)
-        for env_var in {"LINZA_EMBED_KEY", "LINZA_BRIDGE_THRESHOLD", "LINZA_DEFAULT_PROFILE"}:
+        for env_var in {
+            "LINZA_EMBED_KEY",
+            "LINZA_BRIDGE_THRESHOLD",
+            "LINZA_MAX_BRIDGE_PAIRS",
+            "LINZA_DEFAULT_PROFILE",
+        }:
             self.assertIn(env_var, (root / "README.md").read_text(encoding="utf-8"))
             self.assertIn(env_var, (root / "README_EN.md").read_text(encoding="utf-8"))
         try:
@@ -413,6 +418,7 @@ class OperatorSurfaceTests(OperatorTestCase):
         self.assertIn("mcp >= 1.0.0", pyproject["project"]["dependencies"])
         self.assertIn("defusedxml >= 0.7", pyproject["project"]["dependencies"])
         self.assertIn("ruff >= 0.8", pyproject["project"]["optional-dependencies"]["dev"])
+        self.assertIn("tomli >= 2.0; python_version < '3.11'", pyproject["project"]["optional-dependencies"]["dev"])
         self.assertEqual(pyproject["tool"]["setuptools"]["package-data"]["linza_mcp"], ["py.typed"])
         self.assertEqual(pyproject["tool"]["ruff"]["target-version"], "py310")
 
@@ -432,6 +438,12 @@ class OperatorSurfaceTests(OperatorTestCase):
 
         server_json = json.loads((root / "server.json").read_text(encoding="utf-8"))
         self.assertEqual(server_json["name"], "io.github.semiotronika/linza-mcp")
+        env_names = {
+            item["name"]
+            for package in server_json["packages"]
+            for item in package.get("environmentVariables", [])
+        }
+        self.assertIn("LINZA_MAX_BRIDGE_PAIRS", env_names)
         self.assertEqual(server_json["version"], __version__)
         self.assertEqual(server_json["packages"][0]["registryType"], "pypi")
         self.assertEqual(server_json["packages"][0]["identifier"], "linza-mcp")
@@ -450,6 +462,7 @@ class OperatorSurfaceTests(OperatorTestCase):
                 "LINZA_EMBED_MODEL",
                 "LINZA_EMBED_KEY",
                 "LINZA_BRIDGE_THRESHOLD",
+                "LINZA_MAX_BRIDGE_PAIRS",
                 "LINZA_DEFAULT_PROFILE",
                 "LINZA_TOOL_SURFACE",
                 "LINZA_LANGUAGE",

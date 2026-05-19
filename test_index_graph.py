@@ -94,6 +94,58 @@ class IndexGraphTests(OperatorTestCase):
             storage.close()
             tmp.cleanup()
 
+    def test_embedding_signature_mismatch_blocks_search_and_bridges(self):
+        from linza_mcp.indexing import embedding_index_status
+
+        tmp, vault, storage, core = self.make_core()
+        try:
+            (vault / "Old.md").write_text("Old indexed note.\n", encoding="utf-8")
+            storage.upsert_file(
+                "Old.md",
+                "Old indexed note.\n",
+                0,
+                [1.0, 0.0],
+                [1.0, 0.0],
+                "old-hash",
+                embedding_provider="OldProvider",
+                embedding_model="old-model",
+                embedding_dim=2,
+            )
+
+            status = embedding_index_status(core)
+            self.assertEqual(status["status"], "needs_reindex")
+            self.assertEqual(status["mismatch_count"], 1)
+
+            asyncio.run(core.rebuild_bridges())
+            self.assertEqual(storage.get_all_bridges(), [])
+
+            search = asyncio.run(core.search("old note"))
+            self.assertEqual(search["error"], "embedding_signature_mismatch")
+
+            with self.assertRaises(RuntimeError):
+                asyncio.run(core.index_single_file("Old.md", "Updated old note."))
+        finally:
+            storage.close()
+            tmp.cleanup()
+
+    def test_bridge_pair_guard_skips_large_pairwise_rebuild(self):
+        tmp, vault, storage, core = self.make_core()
+        try:
+            core.config["max_bridge_pairs"] = 1
+            for name in ["Alpha.md", "Beta.md", "Gamma.md"]:
+                (vault / name).write_text(
+                    "Shared semantic bridge material for the same product workflow.\n",
+                    encoding="utf-8",
+                )
+
+            asyncio.run(core.index_vault(force=True))
+
+            self.assertEqual(storage.get_file_count(), 3)
+            self.assertEqual(storage.get_all_bridges(), [])
+        finally:
+            storage.close()
+            tmp.cleanup()
+
     def test_russian_tokenize_and_lexical_score_work(self):
         from linza_mcp.indexing import lexical_score
         from linza_mcp.utils import tokenize

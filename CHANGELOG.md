@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.1 - 2026-05-20
+
+Release hardening before catalog submission.
+
+### Added
+
+- Runtime embedding-signature validation for stored vectors. Search, bridge
+  rebuilds, and single-file indexing now refuse mixed provider/model/dimension
+  states and ask for a full reindex instead.
+- Quick vault sync status for `agent_workspace` and `doctor`, showing added,
+  changed, or removed Markdown files before agents rely on stale sidecar data.
+- `LINZA_MAX_BRIDGE_PAIRS` guard to skip expensive semantic bridge rebuilds on
+  very large vaults instead of unexpectedly running an unbounded pairwise pass.
+
+### Fixed
+
+- Python 3.10 CI compatibility for release metadata tests.
+
 ## 0.1.0 - 2026-05-19
 
 Initial public preparation of LINZA.

@@ -719,6 +719,7 @@ def load_config_from_env() -> Dict[str, Any]:
         "embed_api_key": os.environ.get("LINZA_EMBED_KEY"),
         "embed_model": os.environ.get("LINZA_EMBED_MODEL"),
         "bridge_threshold": float(os.environ.get("LINZA_BRIDGE_THRESHOLD", "0.55")),
+        "max_bridge_pairs": int(os.environ.get("LINZA_MAX_BRIDGE_PAIRS", "1000000")),
         "default_profile": os.environ.get("LINZA_DEFAULT_PROFILE", "general"),
         "tool_surface": os.environ.get("LINZA_TOOL_SURFACE", "default"),
         "language": os.environ.get("LINZA_LANGUAGE", "auto"),

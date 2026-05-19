@@ -10,6 +10,7 @@ from .artifacts import ARTIFACT_POLICY, ingest_artifacts
 from .draft_map import preview_text
 from .events import analyze_inbox
 from .calibr import CALIBR_POLICY, analyze_trace, record_trace, review_calibr
+from .indexing import embedding_index_status, vault_sync_status
 from .review_queue import learning_examples_from_storage
 from .self_review import apply_review_items, review_next
 from .utils import should_ignore_path, tokenize
@@ -178,6 +179,27 @@ def _doctor_check(check_id: str, label: str, status: str, detail: str) -> dict[s
     }
 
 
+def _workspace_state(core) -> dict[str, Any]:
+    sync = vault_sync_status(core)
+    embeddings = embedding_index_status(core)
+    warnings: list[str] = []
+    if sync["status"] in {"needs_index", "stale"}:
+        warnings.append(sync["message"])
+    if embeddings["status"] == "needs_reindex":
+        warnings.append(embeddings["message"])
+    return {
+        "sync": sync,
+        "embeddings": embeddings,
+        "warnings": warnings,
+    }
+
+
+def _attach_workspace_state(core, response: dict[str, Any]) -> dict[str, Any]:
+    if isinstance(response, dict):
+        response.setdefault("workspace_state", _workspace_state(core))
+    return response
+
+
 def doctor(core) -> dict[str, Any]:
     storage = core.storage
     vault_path = Path(getattr(storage, "vault_path", "."))
@@ -204,6 +226,10 @@ def doctor(core) -> dict[str, Any]:
         "calibr_metrics": storage.get_calibr_metric_count(),
         "audit_events": storage.get_audit_event_count(),
     }
+    sync = vault_sync_status(core)
+    embedding_index = embedding_index_status(core)
+    max_bridge_pairs = int(core.config.get("max_bridge_pairs", 1000000) or 0)
+    bridge_pair_count = (counts["indexed_files"] * (counts["indexed_files"] - 1)) // 2
     embedding_provider = type(core.embed).__name__
     embedding_model = str(getattr(core.embed, "model", "") or "")
     embedding_url = str(getattr(core.embed, "api_url", "") or "")
@@ -236,8 +262,30 @@ def doctor(core) -> dict[str, Any]:
         _doctor_check(
             "embeddings",
             "Embeddings",
-            "ok",
-            embedding_detail,
+            "fail" if embedding_index["status"] == "needs_reindex" else "ok",
+            f"{embedding_detail} {embedding_index['message']}",
+        ),
+        _doctor_check(
+            "embedding_signature",
+            "Embedding signature",
+            "fail" if embedding_index["status"] == "needs_reindex" else "ok",
+            embedding_index["message"],
+        ),
+        _doctor_check(
+            "source_sync",
+            "Source folder sync",
+            "ok" if sync["status"] == "ok" else "warn",
+            sync["message"],
+        ),
+        _doctor_check(
+            "bridge_scale",
+            "Bridge scale guard",
+            "warn" if max_bridge_pairs > 0 and bridge_pair_count > max_bridge_pairs else "ok",
+            (
+                f"{bridge_pair_count} candidate pairs; max bridge pairs is {max_bridge_pairs}."
+                if max_bridge_pairs > 0
+                else f"{bridge_pair_count} candidate pairs; bridge pair guard is disabled."
+            ),
         ),
         _doctor_check(
             "artifact_inbox",
@@ -269,7 +317,11 @@ def doctor(core) -> dict[str, Any]:
 
     has_material = counts["indexed_files"] > 0 or counts["artifacts"] > 0
     has_failure = any(item["status"] == "fail" for item in checks)
-    status = "ready" if sqlite_ok and has_material and not has_failure else "needs_attention"
+    status = (
+        "ready"
+        if sqlite_ok and has_material and not has_failure and sync["status"] in {"ok", "empty"}
+        else "needs_attention"
+    )
 
     if status == "ready":
         title = "LINZA is ready to work"
@@ -288,6 +340,10 @@ def doctor(core) -> dict[str, Any]:
         next_steps.insert(0, "Add one real artifact first: a document, saved article, chat, log, or research note.")
     if counts["indexed_files"] == 0 and counts["source_markdown_files"] > 0:
         next_steps.insert(0, "Run the first note index so LINZA can see the local Markdown base.")
+    if sync["status"] == "stale":
+        next_steps.insert(0, "Run index_all before relying on graph, search, or bridge results.")
+    if embedding_index["status"] == "needs_reindex":
+        next_steps.insert(0, "Run index_all with force=true after changing the embedding provider or model.")
 
     return {
         "tool": "agent_workspace",
@@ -324,6 +380,21 @@ def doctor(core) -> dict[str, Any]:
             "provider": embedding_provider,
             "model": embedding_model,
             "url": embedding_url,
+            "index": embedding_index,
+        },
+        "sync": sync,
+        "limits": {
+            "bridge_pairs": bridge_pair_count,
+            "max_bridge_pairs": max_bridge_pairs,
+        },
+        "workspace_state": {
+            "sync": sync,
+            "embeddings": embedding_index,
+            "warnings": [
+                item["detail"]
+                for item in checks
+                if item["status"] in {"warn", "fail"}
+            ],
         },
         "policy": ARTIFACT_POLICY + CALIBR_POLICY,
     }
@@ -940,26 +1011,26 @@ async def agent_workspace(
     safe_limit = _safe_limit(limit)
 
     if normalized_action == "ingest_artifacts":
-        return ingest_artifacts(
+        return _attach_workspace_state(core, ingest_artifacts(
             core,
             artifacts or [],
             source_kind=source_kind,
             batch_id=batch_id,
             privacy=privacy,
-        )
+        ))
     if normalized_action == "analyze_inbox":
-        return analyze_inbox(core, source_kind=source_kind, batch_id=batch_id, limit=safe_limit)
+        return _attach_workspace_state(core, analyze_inbox(core, source_kind=source_kind, batch_id=batch_id, limit=safe_limit))
     if normalized_action == "review_next":
-        return review_next(
+        return _attach_workspace_state(core, review_next(
             core,
             kind=kind,
             limit=safe_limit,
             source_kind=source_kind,
             batch_id=batch_id,
             trace_id=trace_id,
-        )
+        ))
     if normalized_action == "apply_review_items":
-        return apply_review_items(
+        return _attach_workspace_state(core, apply_review_items(
             core,
             item_ids=item_ids or [],
             dry_run=dry_run,
@@ -967,17 +1038,17 @@ async def agent_workspace(
             source_kind=source_kind,
             batch_id=batch_id,
             trace_id=trace_id,
-        )
+        ))
     if normalized_action == "teach":
-        return await teach_workspace(
+        return _attach_workspace_state(core, await teach_workspace(
             core,
             limit=safe_limit,
             max_notes=_kwargs.get("max_notes", 120),
             max_domains=_kwargs.get("max_domains", 8),
             include_memory=bool(_kwargs.get("include_memory", False)),
-        )
+        ))
     if normalized_action == "grow":
-        return await grow_workspace(
+        return _attach_workspace_state(core, await grow_workspace(
             core,
             mode=str(_kwargs.get("mode", "assisted")),
             limit=safe_limit,
@@ -986,43 +1057,43 @@ async def agent_workspace(
             dry_run=dry_run,
             allow_overwrite=bool(_kwargs.get("allow_overwrite", False)),
             include_memory=bool(_kwargs.get("include_memory", False)),
-        )
+        ))
     if normalized_action == "connect":
-        return await connect_nodes(
+        return _attach_workspace_state(core, await connect_nodes(
             core,
             source=str(_kwargs.get("source", "")),
             target=str(_kwargs.get("target", "")),
             limit=safe_limit,
             max_depth=int(_kwargs.get("max_depth", 4)),
-        )
+        ))
     if normalized_action == "map":
-        return await workspace_map(
+        return _attach_workspace_state(core, await workspace_map(
             core,
             limit=safe_limit,
             max_notes=_kwargs.get("max_notes", 120),
             max_domains=_kwargs.get("max_domains", 8),
-        )
+        ))
     if normalized_action == "search_memory":
-        return search_memory(core, query=query, limit=safe_limit)
+        return _attach_workspace_state(core, search_memory(core, query=query, limit=safe_limit))
     if normalized_action == "export_context":
-        return export_context(core, query=query, limit=safe_limit)
+        return _attach_workspace_state(core, export_context(core, query=query, limit=safe_limit))
     if normalized_action == "record_trace":
-        return record_trace(core, trace or {})
+        return _attach_workspace_state(core, record_trace(core, trace or {}))
     if normalized_action == "analyze_trace":
-        return analyze_trace(core, trace_id=trace_id, limit=safe_limit)
+        return _attach_workspace_state(core, analyze_trace(core, trace_id=trace_id, limit=safe_limit))
     if normalized_action == "review_calibr":
-        return review_calibr(core, trace_id=trace_id, limit=safe_limit)
+        return _attach_workspace_state(core, review_calibr(core, trace_id=trace_id, limit=safe_limit))
     if normalized_action == "doctor":
         return doctor(core)
 
-    return {
+    return _attach_workspace_state(core, {
         "tool": "agent_workspace",
         "action": normalized_action,
         "status": "blocked",
         "error": "unsupported_action",
         "supported_actions": SUPPORTED_AGENT_WORKSPACE_ACTIONS,
         "policy": ARTIFACT_POLICY + CALIBR_POLICY,
-    }
+    })
 
 
 __all__ = [

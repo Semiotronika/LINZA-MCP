@@ -43,10 +43,15 @@ class AgentWorkspaceTests(OperatorTestCase):
             self.assertIn("calibr_lens", check_ids)
             self.assertIn("source_note_safety", check_ids)
             self.assertIn("embeddings", check_ids)
+            self.assertIn("embedding_signature", check_ids)
+            self.assertIn("source_sync", check_ids)
+            self.assertIn("bridge_scale", check_ids)
             embedding_check = next(item for item in doctor["checks"] if item["id"] == "embeddings")
             self.assertEqual(embedding_check["status"], "ok")
             self.assertIn("StableTestEmbeddingProvider", embedding_check["detail"])
             self.assertEqual(doctor["embeddings"]["provider"], "StableTestEmbeddingProvider")
+            self.assertEqual(doctor["workspace_state"]["sync"]["status"], "ok")
+            self.assertEqual(doctor["workspace_state"]["embeddings"]["status"], "ok")
 
             self.assertGreaterEqual(doctor["counts"]["indexed_files"], 1)
             self.assertEqual(doctor["counts"]["artifacts"], ingest["summary"]["stored"])
@@ -59,6 +64,28 @@ class AgentWorkspaceTests(OperatorTestCase):
             self.assertNotIn("index_all", human_dump)
             self.assertNotIn("build_review_apply_queue", human_dump)
             self.assertNotIn("approve_review_queue_items", human_dump)
+        finally:
+            storage.close()
+            tmp.cleanup()
+
+    def test_agent_workspace_reports_stale_source_folder_state(self):
+        tmp, vault, storage, core = self.make_core()
+        try:
+            note = vault / "Project Log.md"
+            note.write_text("Decision: index this note first.\n", encoding="utf-8")
+            asyncio.run(core.index_vault(force=True))
+
+            note.write_text("Decision: index this note first.\nAction: changed after index.\n", encoding="utf-8")
+            result = asyncio.run(core.agent_workspace(action="search_memory", query="decision"))
+
+            self.assertEqual(result["workspace_state"]["sync"]["status"], "stale")
+            self.assertEqual(result["workspace_state"]["sync"]["changed_count"], 1)
+            self.assertTrue(result["workspace_state"]["warnings"])
+
+            doctor = asyncio.run(core.agent_workspace(action="doctor"))
+            source_sync = next(item for item in doctor["checks"] if item["id"] == "source_sync")
+            self.assertEqual(source_sync["status"], "warn")
+            self.assertEqual(doctor["status"], "needs_attention")
         finally:
             storage.close()
             tmp.cleanup()

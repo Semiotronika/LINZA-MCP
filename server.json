@@ -7,12 +7,12 @@
     "url": "https://github.com/Semiotronika/LINZA-MCP",
     "source": "github"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "linza-mcp",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "transport": {
         "type": "stdio"
       },
@@ -51,6 +51,12 @@
         {
           "name": "LINZA_BRIDGE_THRESHOLD",
           "description": "Semantic bridge threshold as a floating-point string. Default: 0.55.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "LINZA_MAX_BRIDGE_PAIRS",
+          "description": "Maximum note pairs for semantic bridge rebuilds. Default: 1000000. Use 0 to disable the guard.",
           "isRequired": false,
           "format": "string"
         },

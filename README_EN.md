@@ -275,7 +275,7 @@ LINZA is not a browser automation server, cloud memory, or an autopilot that sil
 
 ## Stability
 
-`0.1.0` is an alpha MVP. The safety contract is meant to be stable: source note
+`0.1.1` is an alpha MVP. The safety contract is meant to be stable: source note
 bodies are not rewritten by indexing, artifact ingest, search, map, or grow
 preview. Low-level advanced tools and internal module boundaries may still
 change while the server is being polished.
@@ -331,6 +331,7 @@ python -m unittest test_agent_workspace.AgentWorkspaceTests.test_examples_sample
 | `LINZA_EMBED_MODEL` | Embedding model name |
 | `LINZA_EMBED_KEY` | Optional key for an OpenAI-compatible embeddings API |
 | `LINZA_BRIDGE_THRESHOLD` | Semantic bridge threshold; default `0.55` |
+| `LINZA_MAX_BRIDGE_PAIRS` | Maximum note pairs for semantic bridge rebuilds; default `1000000`, `0` disables the guard |
 | `LINZA_DEFAULT_PROFILE` | Default search profile name; default `general` |
 | `LINZA_TOOL_SURFACE` | `default` (15 tools) or `advanced` |
 | `LINZA_LANGUAGE` | Human-facing guide language: `auto`, `en`, or `ru` |

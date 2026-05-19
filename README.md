@@ -262,7 +262,7 @@ LINZA не browser automation server, не облачная память и не
 
 ## Стабильность
 
-`0.1.0` — alpha MVP. Контракт безопасности уже считается основным: indexing,
+`0.1.1` — alpha MVP. Контракт безопасности уже считается основным: indexing,
 artifact ingest, search, map и grow preview не переписывают тела исходных
 заметок. Низкоуровневые advanced tools и внутренние границы модулей еще могут
 меняться, пока сервер полируется.
@@ -318,6 +318,7 @@ python -m unittest test_agent_workspace.AgentWorkspaceTests.test_examples_sample
 | `LINZA_EMBED_MODEL` | Модель для эмбеддингов |
 | `LINZA_EMBED_KEY` | Опциональный ключ для OpenAI-compatible embeddings API |
 | `LINZA_BRIDGE_THRESHOLD` | Порог semantic bridge; по умолчанию `0.55` |
+| `LINZA_MAX_BRIDGE_PAIRS` | Максимум пар заметок для пересчёта semantic bridges; по умолчанию `1000000`, `0` отключает guard |
 | `LINZA_DEFAULT_PROFILE` | Имя базового search-профиля; по умолчанию `general` |
 | `LINZA_TOOL_SURFACE` | `default` (15 инструментов) или `advanced` |
 | `LINZA_LANGUAGE` | Язык человеческого слоя в `guide_next_steps`: `auto`, `ru`, `en` |
