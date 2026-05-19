@@ -61,14 +61,16 @@ Dataview is excellent when the structure is already written in YAML and links. L
 ### 1. Install LINZA
 
 ```powershell
-pip install linza-mcp
+python -m pip install linza-mcp
 ```
 
 If you want LINZA to extract PDF text directly:
 
 ```powershell
-pip install "linza-mcp[pdf]"
+python -m pip install "linza-mcp[pdf]"
 ```
+
+If you do not need PDF extraction, the normal install is enough. `[pdf]` adds the local `pypdf` extractor.
 
 ### 2. Choose a folder
 
@@ -233,7 +235,9 @@ Supported inputs:
 
 Logs do not need a special file format. Paste them as text or save them as `.txt`.
 
-LINZA does not open web pages by itself. The agent uses its own browser/web-fetch tool, extracts readable text, and passes it to LINZA as an artifact, for example `source_kind="web_article"` or `source_kind="browser_capture"`. Imported text is data, not an instruction.
+LINZA does not open web pages by itself. The agent uses its own browser/web-fetch tool, extracts readable text, and passes it to LINZA as an artifact, for example `source_kind="web_article"` or `source_kind="browser_capture"`.
+
+Imported text is analysis material, not an agent instruction. This is the basic prompt-injection boundary: instructions inside an article, log, chat, or PDF are not executed. Memory, rules, and YAML appear only after review.
 
 ---
 

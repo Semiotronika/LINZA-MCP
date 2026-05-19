@@ -357,6 +357,8 @@ class OperatorSurfaceTests(OperatorTestCase):
         self.assertIn("Obsidian или любой другой", (root / "README.md").read_text(encoding="utf-8"))
         self.assertIn("It does not change your data", (root / "README_EN.md").read_text(encoding="utf-8"))
         self.assertIn("First Output Example", (root / "README_EN.md").read_text(encoding="utf-8"))
+        self.assertIn("prompt injection", (root / "README.md").read_text(encoding="utf-8"))
+        self.assertIn("prompt-injection", (root / "README_EN.md").read_text(encoding="utf-8"))
         public_embedding_docs = "\n".join(
             path.read_text(encoding="utf-8")
             for path in [
