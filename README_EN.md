@@ -1,7 +1,5 @@
 # LINZA — Local MCP Server for Agent Workspaces
 
-<!-- mcp-name: io.github.semiotronika/linza-mcp -->
-
 **It does not change your data. It changes how you see it.**
 
 You have a folder full of notes, articles, logs, drafts, chats, and documents.
@@ -278,3 +276,9 @@ filtering, generated-write safety, the example pack, and calibr trace review.
 | `LINZA_BRIDGE_THRESHOLD` | Semantic bridge threshold; default `0.55` |
 | `LINZA_DEFAULT_PROFILE` | Default search profile name; default `general` |
 | `LINZA_TOOL_SURFACE` | `default` (15 tools) or `advanced` (full surface) |
+
+---
+
+<sub>Cosines do not converge because everything is the same. They converge when meaning finds its angle.</sub>
+
+<!-- mcp-name: io.github.semiotronika/linza-mcp -->

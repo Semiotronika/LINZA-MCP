@@ -1,7 +1,5 @@
 # LINZA
 
-<!-- mcp-name: io.github.semiotronika/linza-mcp -->
-
 **Не меняет данные — меняет взгляд.**
 
 У тебя есть папка с заметками, статьями, логами, черновиками, чатами. В ней уже есть структура, связи, эволюция мысли — просто она скрыта за объёмом. LINZA делает невидимое видимым.
@@ -260,3 +258,9 @@ python -m unittest test_agent_workspace.AgentWorkspaceTests.test_examples_sample
 | `LINZA_BRIDGE_THRESHOLD` | Порог semantic bridge; по умолчанию `0.55` |
 | `LINZA_DEFAULT_PROFILE` | Имя базового search-профиля; по умолчанию `general` |
 | `LINZA_TOOL_SURFACE` | `default` (15 инструментов) или `advanced` (полный набор) |
+
+---
+
+<sub>Косинусы сходятся не потому, что всё одинаковое. Они сходятся, когда смысл нашёл свой угол.</sub>
+
+<!-- mcp-name: io.github.semiotronika/linza-mcp -->
