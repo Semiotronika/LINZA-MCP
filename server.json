@@ -25,19 +25,19 @@
         },
         {
           "name": "LINZA_EMBED_PROVIDER",
-          "description": "Embedding provider: hash for offline startup, openai for OpenAI-compatible APIs, or ollama.",
+          "description": "Embedding provider. Allowed values: lmstudio, openai, ollama. Default: lmstudio.",
           "isRequired": false,
           "format": "string"
         },
         {
           "name": "LINZA_EMBED_URL",
-          "description": "Embedding API base URL when LINZA_EMBED_PROVIDER is openai or ollama.",
+          "description": "Embedding API base URL when LINZA_EMBED_PROVIDER is lmstudio, openai, or ollama.",
           "isRequired": false,
           "format": "string"
         },
         {
           "name": "LINZA_EMBED_MODEL",
-          "description": "Embedding model name or hash dimension.",
+          "description": "Embedding model name.",
           "isRequired": false,
           "format": "string"
         },
@@ -50,7 +50,7 @@
         },
         {
           "name": "LINZA_BRIDGE_THRESHOLD",
-          "description": "Semantic bridge threshold. Defaults to 0.55.",
+          "description": "Semantic bridge threshold as a floating-point string. Default: 0.55.",
           "isRequired": false,
           "format": "string"
         },
@@ -62,7 +62,7 @@
         },
         {
           "name": "LINZA_TOOL_SURFACE",
-          "description": "Tool surface: default for the compact public workflow or advanced for development.",
+          "description": "Tool surface. Allowed values: default, advanced. Default: default.",
           "isRequired": false,
           "format": "string"
         }

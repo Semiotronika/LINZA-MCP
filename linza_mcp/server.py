@@ -18,7 +18,7 @@ from mcp.types import CallToolResult, TextContent, Tool
 from .compat import __version__, LinzaCore
 from .embed import (
     EmbeddingProvider,
-    HashingEmbeddingProvider,
+    LMStudioProvider,
     OllamaProvider,
     OpenAICompatibleProvider,
     get_embedding_provider,
@@ -712,7 +712,7 @@ def _report_schema(default_path: str, extra: dict[str, Any] | None = None) -> di
 def load_config_from_env() -> Dict[str, Any]:
     return {
         "vault_path": os.environ.get("LINZA_VAULT", os.path.abspath("./vault")),
-        "embed_provider": os.environ.get("LINZA_EMBED_PROVIDER", "hash"),
+        "embed_provider": os.environ.get("LINZA_EMBED_PROVIDER", "lmstudio"),
         "embed_api_url": os.environ.get("LINZA_EMBED_URL", "http://127.0.0.1:1234/v1"),
         "embed_api_key": os.environ.get("LINZA_EMBED_KEY"),
         "embed_model": os.environ.get("LINZA_EMBED_MODEL"),
@@ -754,7 +754,7 @@ async def main() -> None:
 
 __all__ = [
     "EmbeddingProvider",
-    "HashingEmbeddingProvider",
+    "LMStudioProvider",
     "OllamaProvider",
     "OpenAICompatibleProvider",
     "LinzaMCPServer",

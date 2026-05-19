@@ -6,7 +6,9 @@ import hashlib
 from pathlib import Path
 from typing import Any
 import zipfile
-import xml.etree.ElementTree as ET
+
+from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
 
 from .chunker import split_semantic_chunks, split_text_chunks
 
@@ -54,6 +56,15 @@ def _xml_local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1] if "}" in tag else tag
 
 
+def _parse_xml(data: bytes, label: str) -> ET.Element:
+    try:
+        return ET.fromstring(data)
+    except DefusedXmlException as exc:
+        raise ValueError(f"{label} XML contains unsafe constructs") from exc
+    except ET.ParseError as exc:
+        raise ValueError(f"{label} XML is malformed") from exc
+
+
 def _docx_paragraph_text(element: ET.Element) -> str:
     parts: list[str] = []
     for node in element.iter():
@@ -76,7 +87,7 @@ def extract_docx_text(path: Path) -> tuple[str, dict[str, Any]]:
     except zipfile.BadZipFile as exc:
         raise ValueError("DOCX artifact is not a valid Office Open XML file") from exc
 
-    root = ET.fromstring(document_xml)
+    root = _parse_xml(document_xml, "DOCX document")
     paragraphs = [
         text
         for text in (
@@ -92,7 +103,7 @@ def extract_docx_text(path: Path) -> tuple[str, dict[str, Any]]:
 
 def _xlsx_shared_strings(archive: zipfile.ZipFile) -> list[str]:
     try:
-        root = ET.fromstring(archive.read("xl/sharedStrings.xml"))
+        root = _parse_xml(archive.read("xl/sharedStrings.xml"), "XLSX shared strings")
     except KeyError:
         return []
     strings: list[str] = []
@@ -110,8 +121,8 @@ def _xlsx_shared_strings(archive: zipfile.ZipFile) -> list[str]:
 
 def _xlsx_sheet_names(archive: zipfile.ZipFile) -> dict[str, str]:
     try:
-        workbook = ET.fromstring(archive.read("xl/workbook.xml"))
-        rels = ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+        workbook = _parse_xml(archive.read("xl/workbook.xml"), "XLSX workbook")
+        rels = _parse_xml(archive.read("xl/_rels/workbook.xml.rels"), "XLSX workbook relationships")
     except KeyError:
         return {}
 
@@ -171,7 +182,7 @@ def extract_xlsx_text(path: Path) -> tuple[str, dict[str, Any]]:
             sections: list[str] = []
             row_count = 0
             for sheet_path in sheet_paths:
-                root = ET.fromstring(archive.read(sheet_path))
+                root = _parse_xml(archive.read(sheet_path), f"XLSX worksheet {sheet_path}")
                 rows: list[str] = []
                 for row in root.iter():
                     if _xml_local_name(row.tag) != "row":

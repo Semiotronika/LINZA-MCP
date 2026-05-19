@@ -6,7 +6,7 @@ LINZA solves one concrete problem: you have a folder of Markdown notes, and you 
 
 It is a local MCP server for notes, documents, articles, chats, logs, and drafts. LINZA reads a folder, builds a map of topics and relations, shows evidence-backed review cards, and stores its conclusions next to your files in `.linza/linza.db`. Your Markdown stays yours.
 
-LINZA does not impose a fixed ontology. It does not rename notes by itself. It does not pretend hash embeddings are a real semantic model. It gives an agent a safer way to see structure, and gives you a calm review gate before anything is accepted.
+LINZA does not impose a fixed ontology. It does not rename notes by itself. It gives an agent a safer way to see structure, and gives you a calm review gate before anything is accepted.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://python.org)
 [![MCP](https://img.shields.io/badge/protocol-MCP_stdio-lightgrey.svg)](https://modelcontextprotocol.io)
@@ -56,31 +56,41 @@ Graph View shows links that already exist. LINZA tries to show what is not yet l
 
 Dataview is excellent when the structure is already written in YAML and links. LINZA proposes hypotheses first, shows evidence, and keeps acceptance behind a review gate. By default it is preview, not automation.
 
-## Quick Start
+## Installation
 
-After publication, install from PyPI:
+### 1. Install LINZA
 
 ```powershell
 pip install linza-mcp
-$env:LINZA_VAULT="C:\path\to\your\notes"
-linza-mcp
 ```
 
-For PDF extraction:
+If you want LINZA to extract PDF text directly:
 
 ```powershell
 pip install "linza-mcp[pdf]"
 ```
 
-Before publication, or for local verification, run from source:
+### 2. Choose a folder
 
-```powershell
-cd "C:\path\to\LINZA-MCP"
-$env:LINZA_VAULT="C:\path\to\your\notes"
-python -m server
-```
+LINZA works with any Markdown folder: an Obsidian vault, a project workspace, or a standalone document folder.
 
-Connect it to Claude Desktop, Cursor, OpenCode, or any MCP client:
+In the examples below, replace `/absolute/path/to/workspace-or-vault` with your own path.
+
+### 3. Configure embeddings
+
+For semantic search, LINZA needs a local embedding model.
+
+The simplest local path is LM Studio:
+
+1. Open LM Studio.
+2. Download an embedding model, for example `text-embedding-granite-embedding-278m-multilingual`, `nomic-embed-text-v1.5`, or another embedding model.
+3. Start Local Server.
+4. Make sure the endpoint is available at `http://127.0.0.1:1234/v1`.
+
+### 4. Connect an MCP client
+
+Connect LINZA to Claude Desktop, Cursor, OpenCode, or any MCP client:
+
 
 ```json
 {
@@ -89,8 +99,9 @@ Connect it to Claude Desktop, Cursor, OpenCode, or any MCP client:
       "command": "linza-mcp",
       "env": {
         "LINZA_VAULT": "/absolute/path/to/workspace-or-vault",
-        "LINZA_EMBED_PROVIDER": "hash",
+        "LINZA_EMBED_PROVIDER": "lmstudio",
         "LINZA_EMBED_URL": "http://127.0.0.1:1234/v1",
+        "LINZA_EMBED_MODEL": "your-embedding-model-name",
         "LINZA_TOOL_SURFACE": "default"
       }
     }
@@ -108,28 +119,47 @@ VS Code / Copilot MCP uses `servers`:
       "command": "linza-mcp",
       "env": {
         "LINZA_VAULT": "/absolute/path/to/workspace-or-vault",
-        "LINZA_EMBED_PROVIDER": "hash"
+        "LINZA_EMBED_PROVIDER": "lmstudio",
+        "LINZA_EMBED_URL": "http://127.0.0.1:1234/v1",
+        "LINZA_EMBED_MODEL": "your-embedding-model-name"
       }
     }
   }
 }
 ```
 
+### 5. Check the setup
+
+```powershell
+linza-mcp --version
+```
+
+Then ask the agent:
+
+```text
+Check LINZA with agent_workspace(action="doctor").
+Index the folder and show the first 3-5 review cards.
+```
+
 ---
 
 ## Embeddings
 
-By default, LINZA starts with offline hashing embeddings. This is deliberate: the first run does not need network access, API keys, or a local embedding server.
+Embeddings are not decoration; they are the quality of LINZA's sight. The main path is simple: a local model in LM Studio and an MCP server next to your folder.
 
-But hash embeddings are weak semantics. They are useful for smoke tests, diagnostics, and a cautious first contact, not for subtle semantic search. For better links and search, connect an OpenAI-compatible endpoint or Ollama:
+- `lmstudio` is the recommended local setup. Use it when you want good semantic search, topic maps, and links without cloud calls.
+- `ollama` is a local Ollama setup.
+- `openai` is any OpenAI-compatible endpoint with `/embeddings`.
+
+Example LM Studio environment:
 
 ```powershell
-$env:LINZA_EMBED_PROVIDER="openai"
+$env:LINZA_EMBED_PROVIDER="lmstudio"
 $env:LINZA_EMBED_URL="http://127.0.0.1:1234/v1"
-$env:LINZA_EMBED_MODEL="text-embedding-model"
+$env:LINZA_EMBED_MODEL="your-embedding-model-name"
 ```
 
-If you switch embedding provider or model dimension, run a full reindex. Old hash vectors and new model vectors live in different spaces and should not be mixed.
+If you switch embedding provider or model dimension, run a full reindex. Vectors from different models live in different spaces and should not be mixed.
 
 ---
 
@@ -266,9 +296,9 @@ python -m unittest test_agent_workspace.AgentWorkspaceTests.test_examples_sample
 | Variable | Description |
 |---|---|
 | `LINZA_VAULT` | Path to the Markdown folder |
-| `LINZA_EMBED_PROVIDER` | `hash` (offline default), `openai`, or `ollama` |
+| `LINZA_EMBED_PROVIDER` | `lmstudio` for the recommended local setup; `openai` or `ollama` are also supported |
 | `LINZA_EMBED_URL` | Embeddings API URL |
-| `LINZA_EMBED_MODEL` | Embedding model name or hash dimension |
+| `LINZA_EMBED_MODEL` | Embedding model name |
 | `LINZA_EMBED_KEY` | Optional key for an OpenAI-compatible embeddings API |
 | `LINZA_BRIDGE_THRESHOLD` | Semantic bridge threshold; default `0.55` |
 | `LINZA_DEFAULT_PROFILE` | Default search profile name; default `general` |

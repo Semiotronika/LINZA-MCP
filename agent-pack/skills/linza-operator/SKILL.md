@@ -102,8 +102,8 @@ If `index_all` fails:
 - show the error plainly;
 - run `agent_workspace(action="doctor")` if the server is still reachable;
 - check that `LINZA_VAULT` points to an existing local directory;
-- retry with `LINZA_EMBED_PROVIDER=hash` if the embedding endpoint is missing or
-  unreachable;
+- if the embedding endpoint is missing or unreachable, ask the human to start
+  LM Studio Local Server or correct `LINZA_EMBED_URL` / `LINZA_EMBED_MODEL`;
 - do not attempt apply or grow actions until indexing is healthy.
 
 If `approve_review_queue_items` returns missing or `not_found` IDs:
@@ -116,8 +116,8 @@ If `approve_review_queue_items` returns missing or `not_found` IDs:
 If an embedding endpoint fails:
 
 - treat it as infrastructure failure, not as evidence about the user's notes;
-- switch to offline hashing only when the human accepts lower-quality semantic
-  search for this run;
+- for LM Studio, ask the human to start Local Server and confirm the selected
+  model is an embedding model, not a chat model;
 - keep all write tools in dry-run mode after a provider switch.
 
 If a write is blocked:

@@ -3,9 +3,11 @@ include README_EN.md
 include LICENSE
 include SECURITY.md
 include CHANGELOG.md
+include CONTRIBUTING.md
 include server.json
 include glama.json
 include LINZA_TOOL_CATALOG.md
+include LINZA_TOOL_GUIDE.md
 recursive-include agent-pack *.md
 recursive-include examples *.md *.json
 recursive-include scripts *.md *.py *.ps1

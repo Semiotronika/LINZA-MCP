@@ -2,14 +2,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from server import (
-    HashingEmbeddingProvider,
+from linza_mcp import (
     LinzaCore,
     LinzaStorage,
     extract_tag_details,
     extract_tags,
     normalize_tag,
 )
+from test_support import StableTestEmbeddingProvider
 
 
 class TagVocabularyTests(unittest.TestCase):
@@ -47,7 +47,7 @@ tags:
 
             storage = LinzaStorage(vault, vault / ".linza" / "linza.db")
             try:
-                core = LinzaCore(storage, HashingEmbeddingProvider(), {})
+                core = LinzaCore(storage, StableTestEmbeddingProvider(), {})
                 audit = core.audit_tag_vocabulary()
             finally:
                 storage.close()
@@ -78,7 +78,7 @@ tags:
 
             storage = LinzaStorage(vault, vault / ".linza" / "linza.db")
             try:
-                core = LinzaCore(storage, HashingEmbeddingProvider(), {})
+                core = LinzaCore(storage, StableTestEmbeddingProvider(), {})
                 result = core.suggest_tag_candidates("Log.md")
             finally:
                 storage.close()
@@ -102,7 +102,7 @@ tags:
 
             storage = LinzaStorage(vault, vault / ".linza" / "linza.db")
             try:
-                core = LinzaCore(storage, HashingEmbeddingProvider(), {})
+                core = LinzaCore(storage, StableTestEmbeddingProvider(), {})
                 result = core.suggest_tag_candidates("Tagged.md")
             finally:
                 storage.close()

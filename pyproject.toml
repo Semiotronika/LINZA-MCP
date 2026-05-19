@@ -40,6 +40,7 @@ dependencies = [
   "mcp >= 1.0.0",
   "numpy >= 1.24",
   "PyYAML >= 6.0",
+  "defusedxml >= 0.7",
 ]
 
 [project.optional-dependencies]

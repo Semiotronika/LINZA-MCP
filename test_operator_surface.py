@@ -88,7 +88,7 @@ class OperatorSurfaceTests(OperatorTestCase):
         from linza_mcp.draft_map import select_draft_notes as direct_select_notes
         from linza_mcp.chunker import split_semantic_chunks as direct_semantic_chunks
         from linza_mcp.core import LinzaCore as DirectCore
-        from linza_mcp.embed import HashingEmbeddingProvider as DirectHashing
+        from linza_mcp.embed import LMStudioProvider as DirectLMStudio
         from linza_mcp.embed import MeanCenteredEmbeddings as DirectCenterer
         from linza_mcp.graph import check_rule as direct_check_rule
         from linza_mcp.graph import explain_node as direct_explain_node
@@ -125,15 +125,15 @@ class OperatorSurfaceTests(OperatorTestCase):
         tmp = tempfile.TemporaryDirectory()
         vault = Path(tmp.name)
         storage = DirectStorage(vault / ".linza" / "linza.db")
-        core = DirectCore(vault, storage, DirectHashing(dim=2))
+        core = DirectCore(vault, storage, StableTestEmbeddingProvider(dim=2))
         try:
-            self.assertEqual(DirectHashing.__module__, "linza_mcp.embed")
+            self.assertEqual(DirectLMStudio.__module__, "linza_mcp.embed")
             self.assertEqual(DirectStorage.__module__, "linza_mcp.storage")
             self.assertEqual(DirectMCPServer.__module__, "linza_mcp.server")
             self.assertEqual(direct_load_config.__module__, "linza_mcp.server")
             self.assertEqual(root_server.LinzaCore.__module__, "linza_mcp.compat")
             self.assertEqual(root_server.LinzaMCPServer.__module__, "linza_mcp.server")
-            vectors = asyncio.run(DirectHashing(dim=4).embed(["alpha beta", "beta gamma"]))
+            vectors = asyncio.run(StableTestEmbeddingProvider(dim=4).embed(["alpha beta", "beta gamma"]))
             self.assertEqual(len(vectors), 2)
             self.assertEqual(len(vectors[0]), 4)
             centerer = DirectCenterer()
@@ -221,7 +221,7 @@ class OperatorSurfaceTests(OperatorTestCase):
 
         tmp = tempfile.TemporaryDirectory()
         vault = Path(tmp.name)
-        server = LinzaMCPServer(vault, HashingEmbeddingProvider(model="64"), {"default_profile": "general"})
+        server = LinzaMCPServer(vault, StableTestEmbeddingProvider(), {"default_profile": "general"})
         try:
             handler = server.server.request_handlers[ListToolsRequest]
             result = asyncio.run(handler(ListToolsRequest(method="tools/list")))
@@ -260,7 +260,7 @@ class OperatorSurfaceTests(OperatorTestCase):
 
             advanced_server = LinzaMCPServer(
                 vault / "advanced",
-                HashingEmbeddingProvider(model="64"),
+                StableTestEmbeddingProvider(),
                 {"default_profile": "general", "tool_surface": "advanced"},
             )
             try:
@@ -318,6 +318,7 @@ class OperatorSurfaceTests(OperatorTestCase):
             root / "server.json",
             root / "glama.json",
             root / "LINZA_TOOL_CATALOG.md",
+            root / "LINZA_TOOL_GUIDE.md",
             root / "scripts" / "README.md",
             root / "agent-pack" / "README.md",
             root / "agent-pack" / "skills" / "linza-operator" / "SKILL.md",
@@ -356,6 +357,18 @@ class OperatorSurfaceTests(OperatorTestCase):
         self.assertIn("Obsidian или любой другой", (root / "README.md").read_text(encoding="utf-8"))
         self.assertIn("It does not change your data", (root / "README_EN.md").read_text(encoding="utf-8"))
         self.assertIn("First Output Example", (root / "README_EN.md").read_text(encoding="utf-8"))
+        public_embedding_docs = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in [
+                root / "README.md",
+                root / "README_EN.md",
+                root / "server.json",
+                root / "agent-pack" / "skills" / "linza-operator" / "SKILL.md",
+            ]
+        )
+        removed_provider_name = "hash"
+        self.assertNotIn(f"`{removed_provider_name}`", public_embedding_docs)
+        self.assertNotIn(f"LINZA_EMBED_PROVIDER={removed_provider_name}", public_embedding_docs)
         for env_var in {"LINZA_EMBED_KEY", "LINZA_BRIDGE_THRESHOLD", "LINZA_DEFAULT_PROFILE"}:
             self.assertIn(env_var, (root / "README.md").read_text(encoding="utf-8"))
             self.assertIn(env_var, (root / "README_EN.md").read_text(encoding="utf-8"))
@@ -366,6 +379,15 @@ class OperatorSurfaceTests(OperatorTestCase):
         self.assertEqual(pyproject["project"]["readme"], "README_EN.md")
         self.assertEqual(pyproject["project"]["scripts"]["linza-mcp"], "linza_mcp.cli:main")
         self.assertIn("mcp >= 1.0.0", pyproject["project"]["dependencies"])
+        self.assertIn("defusedxml >= 0.7", pyproject["project"]["dependencies"])
+
+        manifest = (root / "MANIFEST.in").read_text(encoding="utf-8")
+        self.assertIn("include CONTRIBUTING.md", manifest)
+        self.assertIn("include LINZA_TOOL_GUIDE.md", manifest)
+
+        gitignore = (root / ".gitignore").read_text(encoding="utf-8")
+        for ignored in [".env", ".env.*", ".venv/", "venv/"]:
+            self.assertIn(ignored, gitignore)
 
         server_json = json.loads((root / "server.json").read_text(encoding="utf-8"))
         self.assertEqual(server_json["name"], "io.github.semiotronika/linza-mcp")
@@ -395,10 +417,27 @@ class OperatorSurfaceTests(OperatorTestCase):
         self.assertEqual(glama["$schema"], "https://glama.ai/mcp/schemas/server.json")
         self.assertIn("Semiotronika", glama["maintainers"])
 
-        from linza_mcp.embed import HashingEmbeddingProvider, get_embedding_provider
+        from linza_mcp.embed import LMStudioProvider, get_embedding_provider
         from linza_mcp.server import load_config_from_env
-        self.assertEqual(load_config_from_env()["embed_provider"], "hash")
-        self.assertIsInstance(get_embedding_provider(""), HashingEmbeddingProvider)
+        self.assertEqual(load_config_from_env()["embed_provider"], "lmstudio")
+        self.assertIsInstance(get_embedding_provider(""), LMStudioProvider)
+        self.assertIsInstance(
+            get_embedding_provider("lmstudio", "http://127.0.0.1:1234/v1"),
+            LMStudioProvider,
+        )
+        production_embedding_source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in [
+                root / "linza_mcp" / "embed.py",
+                root / "linza_mcp" / "server.py",
+                root / "linza_mcp" / "__init__.py",
+                root / "server.py",
+            ]
+        )
+        legacy_provider_symbol = "Hashing" + "EmbeddingProvider"
+        self.assertNotIn(legacy_provider_symbol, production_embedding_source)
+        with self.assertRaisesRegex(ValueError, "lmstudio, openai, or ollama"):
+            get_embedding_provider(removed_provider_name)
 
         self.assertIn("examples/sample-vault", combined)
         self.assertIn("TOOL_AUDIENCE", combined)
@@ -420,6 +459,13 @@ class OperatorSurfaceTests(OperatorTestCase):
             public_scripts,
             {"README.md", "linza_doctor.py", "smoke_mcp_tools.py", "smoke_copy_vault.py", "demo_core.ps1"},
         )
+        script_text = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (root / "scripts").iterdir()
+            if path.is_file()
+        )
+        self.assertNotIn(legacy_provider_symbol, script_text)
+        self.assertIn("get_embedding_provider", script_text)
         for internal_script in {
             "complete_copy_onboarding.py",
             "live_copy_walkthrough.py",
@@ -431,8 +477,11 @@ class OperatorSurfaceTests(OperatorTestCase):
             self.assertNotIn(internal_script, public_scripts)
         from linza_mcp.operator import TOOL_GUIDE
         catalog = (root / "LINZA_TOOL_CATALOG.md").read_text(encoding="utf-8")
+        guide = (root / "LINZA_TOOL_GUIDE.md").read_text(encoding="utf-8")
         for tool_name in TOOL_GUIDE:
             self.assertIn(f"`{tool_name}`", catalog)
+        self.assertEqual(guide.count("5. Memory"), 1)
+        self.assertIn("6. calibr lens", guide)
         self.assertNotIn(".log", ALLOWED_ARTIFACT_SUFFIXES)
         self.assertEqual({".md", ".txt", ".json", ".pdf", ".docx", ".xlsx"}, ALLOWED_ARTIFACT_SUFFIXES)
 
@@ -554,7 +603,7 @@ class OperatorSurfaceTests(OperatorTestCase):
 
         tmp = tempfile.TemporaryDirectory()
         vault = Path(tmp.name)
-        server = LinzaMCPServer(vault, HashingEmbeddingProvider(model="64"), {"default_profile": "general"})
+        server = LinzaMCPServer(vault, StableTestEmbeddingProvider(), {"default_profile": "general"})
         try:
             diagnostic = asyncio.run(server._call_tool("build_diagnostic_report", {"write": True}))
             diagnostic_payload = json.loads(diagnostic.content[0].text)
@@ -604,7 +653,7 @@ class OperatorSurfaceTests(OperatorTestCase):
 
         tmp = tempfile.TemporaryDirectory()
         vault = Path(tmp.name)
-        server = LinzaMCPServer(vault, HashingEmbeddingProvider(model="64"), {"default_profile": "general"})
+        server = LinzaMCPServer(vault, StableTestEmbeddingProvider(), {"default_profile": "general"})
         try:
             existing = vault / "Existing.md"
             original = "# Existing\n\nOriginal body.\n"

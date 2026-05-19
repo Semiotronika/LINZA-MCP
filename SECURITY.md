@@ -30,6 +30,16 @@ documents, and PDFs may contain instructions intended to manipulate an agent.
 LINZA stores and analyzes these artifacts, but they do not become active rules,
 skills, memory, or note edits without review.
 
+## Supported Versions
+
+Security fixes are applied to the current public minor version. Before v1.0,
+that means the latest `0.x` release line.
+
+| Version | Supported |
+| --- | --- |
+| `0.1.x` | yes |
+| older local snapshots | no |
+
 ## Reporting Issues
 
 Please report security issues through the GitHub repository:
@@ -38,3 +48,9 @@ https://github.com/Semiotronika/LINZA-MCP/issues
 
 Do not include private vault contents, API keys, or personal documents in public
 issues.
+
+Expected response timeline:
+
+- acknowledgement within 7 days;
+- initial triage within 14 days;
+- fix or mitigation plan as soon as practical for confirmed issues.

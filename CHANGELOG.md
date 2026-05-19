@@ -17,11 +17,18 @@ Initial public preparation of LINZA.
 - PyPI packaging metadata, official MCP Registry `server.json`, and Glama
   ownership metadata.
 
+### Changed
+
+- LM Studio is now the default embedding setup for real semantic work.
+- Removed the old no-model embedding fallback from production code and public
+  documentation. Tests use their own deterministic fake provider.
+
 ### Security
 
 - Existing note bodies are protected during indexing, analysis, and artifact
   ingest.
 - Generated reports and context packs are restricted to `.linza`.
+- DOCX/XLSX artifact XML parsing uses `defusedxml`.
 - Public package manifest excludes internal migration scripts, local agent
   instructions, test sidecars, and database files.
 
@@ -30,3 +37,5 @@ Initial public preparation of LINZA.
 - Removed the deprecated MIT license classifier so setuptools 77+ can build the
   package with the SPDX `license = "MIT"` metadata.
 - Added the remaining documented environment variables to `server.json`.
+- Repaired public demo and smoke scripts after removing the old embedding
+  fallback.

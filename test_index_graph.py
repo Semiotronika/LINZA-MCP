@@ -299,8 +299,7 @@ class IndexGraphTests(OperatorTestCase):
         tmp = tempfile.TemporaryDirectory()
         vault = Path(tmp.name)
         storage = Storage(vault / ".linza" / "linza.db")
-        # Override embedder in core for deterministic vectors
-        core = LinzaCore(vault, storage, HashingEmbeddingProvider(dim=2))
+        core = LinzaCore(vault, storage, StableTestEmbeddingProvider(dim=2))
         try:
             (vault / "Alpha.md").write_text("alpha v1", encoding="utf-8")
             (vault / "Beta.md").write_text("beta", encoding="utf-8")
@@ -322,7 +321,7 @@ class IndexGraphTests(OperatorTestCase):
         tmp = tempfile.TemporaryDirectory()
         vault = Path(tmp.name)
         storage = Storage(vault / ".linza" / "linza.db")
-        core = LinzaCore(vault, storage, HashingEmbeddingProvider(dim=2))
+        core = LinzaCore(vault, storage, StableTestEmbeddingProvider(dim=2))
         try:
             (vault / "Alpha.md").write_text("alpha", encoding="utf-8")
             (vault / "Beta.md").write_text("beta", encoding="utf-8")

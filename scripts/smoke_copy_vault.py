@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import os
 import shutil
 import sys
 from datetime import datetime
@@ -21,7 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_ROOT = REPO_ROOT.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from server import HashingEmbeddingProvider, LinzaCore, LinzaStorage, strip_frontmatter  # noqa: E402
+from server import LinzaCore, LinzaStorage, get_embedding_provider, strip_frontmatter  # noqa: E402
 
 
 def hash_markdown_files(root: Path) -> dict[str, str]:
@@ -84,7 +85,17 @@ def first_item_id(queue: dict[str, Any], item_type: str) -> str | None:
     return None
 
 
-async def run_smoke(source_vault: Path, workdir: Path, max_notes: int, max_domains: int, limit: int) -> dict[str, Any]:
+async def run_smoke(
+    source_vault: Path,
+    workdir: Path,
+    max_notes: int,
+    max_domains: int,
+    limit: int,
+    embed_provider: str,
+    embed_model: str | None,
+    embed_url: str,
+    embed_key: str | None,
+) -> dict[str, Any]:
     source_vault = source_vault.resolve()
     workdir = workdir.resolve()
     if not source_vault.exists():
@@ -95,7 +106,8 @@ async def run_smoke(source_vault: Path, workdir: Path, max_notes: int, max_domai
     copy_bodies_before = body_map(copy_vault)
 
     storage = LinzaStorage(copy_vault, copy_vault / ".linza" / "linza.db")
-    core = LinzaCore(storage, HashingEmbeddingProvider(), {})
+    provider = get_embedding_provider(embed_provider, embed_url, embed_key, embed_model)
+    core = LinzaCore(storage, provider, {})
     applied: list[str] = []
     try:
         draft = await core.draft_vault_map(max_notes=max_notes, max_domains=max_domains)
@@ -200,9 +212,23 @@ def main() -> int:
     parser.add_argument("--max-notes", type=int, default=120)
     parser.add_argument("--max-domains", type=int, default=8)
     parser.add_argument("--limit", type=int, default=20)
+    parser.add_argument("--embed-provider", default=os.environ.get("LINZA_EMBED_PROVIDER", "lmstudio"))
+    parser.add_argument("--embed-model", default=os.environ.get("LINZA_EMBED_MODEL"))
+    parser.add_argument("--embed-url", default=os.environ.get("LINZA_EMBED_URL", "http://127.0.0.1:1234/v1"))
+    parser.add_argument("--embed-key", default=os.environ.get("LINZA_EMBED_KEY"))
     args = parser.parse_args()
 
-    summary = asyncio.run(run_smoke(args.source_vault, args.workdir, args.max_notes, args.max_domains, args.limit))
+    summary = asyncio.run(run_smoke(
+        args.source_vault,
+        args.workdir,
+        args.max_notes,
+        args.max_domains,
+        args.limit,
+        args.embed_provider,
+        args.embed_model,
+        args.embed_url,
+        args.embed_key,
+    ))
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
 

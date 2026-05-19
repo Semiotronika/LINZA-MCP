@@ -3,6 +3,11 @@ __pycache__/
 .test-tmp/
 .linza/
 .internal-scripts/
+.env
+.env.*
+!.env.example
+.venv/
+venv/
 AGENTS.md
 build/
 dist/

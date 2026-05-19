@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from typing import List, Optional
 
@@ -43,6 +42,10 @@ class OpenAICompatibleProvider(EmbeddingProvider):
                 return [item["embedding"] for item in embeddings]
 
 
+class LMStudioProvider(OpenAICompatibleProvider):
+    """LM Studio exposes a local OpenAI-compatible /v1/embeddings endpoint."""
+
+
 class OllamaProvider(EmbeddingProvider):
     async def embed(self, texts: List[str]) -> List[List[float]]:
         import aiohttp
@@ -60,48 +63,6 @@ class OllamaProvider(EmbeddingProvider):
                     data = await response.json()
                     embeddings.append(data["embedding"])
         return embeddings
-
-
-class HashingEmbeddingProvider(EmbeddingProvider):
-    """Offline lexical embedding fallback for diagnostics when no model is running."""
-
-    def __init__(
-        self,
-        dim: int = 512,
-        api_url: str = "",
-        api_key: Optional[str] = None,
-        model: Optional[str] = None,
-    ):
-        super().__init__(api_url, api_key, model)
-        self.dim = int(model or dim)
-
-    async def embed(self, texts: List[str]) -> List[List[float]]:
-        vectors = []
-        for text in texts:
-            vec = np.zeros(self.dim, dtype=float)
-            tokens = self._tokenize(text)
-            for token in tokens:
-                digest = hashlib.sha256(token.encode("utf-8")).digest()
-                idx = int.from_bytes(digest[:4], "big") % self.dim
-                sign = 1.0 if digest[4] % 2 == 0 else -1.0
-                vec[idx] += sign
-            norm = np.linalg.norm(vec)
-            if norm > 0:
-                vec = vec / norm
-            vectors.append(vec.tolist())
-        return vectors
-
-    @staticmethod
-    def _tokenize(text: str) -> set[str]:
-        import re
-
-        stopwords = {
-            "the", "and", "for", "with", "from", "this", "that", "into", "about",
-            "как", "что", "для", "это", "или", "при", "над", "под", "про", "без",
-            "через", "после", "тоже", "если", "мой", "моя", "мои", "его", "её",
-        }
-        tokens = re.findall(r"[A-Za-zА-Яа-яёЁ0-9]{3,}", text.lower().replace("ё", "е"))
-        return {token for token in tokens if token not in stopwords}
 
 
 class MeanCenteredEmbeddings:
@@ -187,17 +148,19 @@ def get_embedding_provider(
     api_key: Optional[str] = None,
     model: Optional[str] = None,
 ) -> EmbeddingProvider:
-    provider_name = (provider or "hash").lower()
-    if provider_name in {"hash", "hashing", "offline", "local"}:
-        return HashingEmbeddingProvider(api_url=api_url, api_key=api_key, model=model)
+    provider_name = (provider or "lmstudio").lower()
+    if provider_name in {"lmstudio", "lm-studio", "lm_studio"}:
+        return LMStudioProvider(api_url, api_key, model)
     if provider_name == "ollama":
         return OllamaProvider(api_url, api_key, model)
-    return OpenAICompatibleProvider(api_url, api_key, model)
+    if provider_name in {"openai", "openai-compatible", "openai_compatible", "compatible"}:
+        return OpenAICompatibleProvider(api_url, api_key, model)
+    raise ValueError("Unsupported embedding provider. Use: lmstudio, openai, or ollama.")
 
 
 __all__ = [
     "EmbeddingProvider",
-    "HashingEmbeddingProvider",
+    "LMStudioProvider",
     "MeanCenteredEmbeddings",
     "OllamaProvider",
     "OpenAICompatibleProvider",

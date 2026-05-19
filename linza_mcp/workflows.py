@@ -204,6 +204,15 @@ def doctor(core) -> dict[str, Any]:
         "calibr_metrics": storage.get_calibr_metric_count(),
         "audit_events": storage.get_audit_event_count(),
     }
+    embedding_provider = type(core.embed).__name__
+    embedding_model = str(getattr(core.embed, "model", "") or "")
+    embedding_url = str(getattr(core.embed, "api_url", "") or "")
+    embedding_detail = (
+        f"Using {embedding_provider}"
+        + (f" model={embedding_model}" if embedding_model else "")
+        + (f" at {embedding_url}" if embedding_url else "")
+        + "."
+    )
 
     checks = [
         _doctor_check(
@@ -223,6 +232,12 @@ def doctor(core) -> dict[str, Any]:
             "Human workflow facade",
             "ok",
             "Normal work enters through one workflow facade instead of a raw tool list.",
+        ),
+        _doctor_check(
+            "embeddings",
+            "Embeddings",
+            "ok",
+            embedding_detail,
         ),
         _doctor_check(
             "artifact_inbox",
@@ -304,6 +319,11 @@ def doctor(core) -> dict[str, Any]:
             "path": db_path.as_posix(),
             "exists": db_path.exists(),
             "storage": "SQLite",
+        },
+        "embeddings": {
+            "provider": embedding_provider,
+            "model": embedding_model,
+            "url": embedding_url,
         },
         "policy": ARTIFACT_POLICY + CALIBR_POLICY,
     }

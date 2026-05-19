@@ -42,6 +42,11 @@ class AgentWorkspaceTests(OperatorTestCase):
             self.assertIn("review_gate", check_ids)
             self.assertIn("calibr_lens", check_ids)
             self.assertIn("source_note_safety", check_ids)
+            self.assertIn("embeddings", check_ids)
+            embedding_check = next(item for item in doctor["checks"] if item["id"] == "embeddings")
+            self.assertEqual(embedding_check["status"], "ok")
+            self.assertIn("StableTestEmbeddingProvider", embedding_check["detail"])
+            self.assertEqual(doctor["embeddings"]["provider"], "StableTestEmbeddingProvider")
 
             self.assertGreaterEqual(doctor["counts"]["indexed_files"], 1)
             self.assertEqual(doctor["counts"]["artifacts"], ingest["summary"]["stored"])
@@ -491,7 +496,7 @@ class AgentWorkspaceTests(OperatorTestCase):
                 for path in vault.rglob("*.md")
             }
             storage = Storage(vault / ".linza" / "linza.db")
-            core = LinzaCore(vault, storage, HashingEmbeddingProvider(model="64"))
+            core = LinzaCore(vault, storage, StableTestEmbeddingProvider())
 
             asyncio.run(core.index_vault(force=True))
             doctor = asyncio.run(core.agent_workspace(action="doctor"))

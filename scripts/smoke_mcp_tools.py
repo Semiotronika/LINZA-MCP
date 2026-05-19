@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -21,7 +22,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from mcp.types import ListToolsRequest  # noqa: E402
 
-from linza_mcp.embed import HashingEmbeddingProvider  # noqa: E402
+from linza_mcp.embed import get_embedding_provider  # noqa: E402
 from linza_mcp.server import LinzaMCPServer  # noqa: E402
 from scripts.smoke_copy_vault import body_map, copy_markdown_vault, hash_markdown_files  # noqa: E402
 
@@ -135,7 +136,14 @@ async def registered_tools(server: LinzaMCPServer) -> list[str]:
     return sorted(tool.name for tool in result.root.tools)
 
 
-async def run_smoke(source_vault: Path, workdir: Path) -> dict[str, Any]:
+async def run_smoke(
+    source_vault: Path,
+    workdir: Path,
+    embed_provider: str,
+    embed_model: str | None,
+    embed_url: str,
+    embed_key: str | None,
+) -> dict[str, Any]:
     source_vault = source_vault.resolve()
     workdir = workdir.resolve()
     if not source_vault.exists():
@@ -147,7 +155,7 @@ async def run_smoke(source_vault: Path, workdir: Path) -> dict[str, Any]:
 
     server = LinzaMCPServer(
         copy_vault,
-        HashingEmbeddingProvider(model="512"),
+        get_embedding_provider(embed_provider, embed_url, embed_key, embed_model),
         {"default_profile": "general", "bridge_threshold": 0.55, "tool_surface": "advanced"},
     )
     records: list[dict[str, Any]] = []
@@ -367,9 +375,20 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Smoke-test every LINZA MCP tool.")
     parser.add_argument("--source-vault", type=Path, default=WORKSPACE_ROOT / "Obsidian" / "base")
     parser.add_argument("--workdir", type=Path, default=REPO_ROOT / ".test-tmp")
+    parser.add_argument("--embed-provider", default=os.environ.get("LINZA_EMBED_PROVIDER", "lmstudio"))
+    parser.add_argument("--embed-model", default=os.environ.get("LINZA_EMBED_MODEL"))
+    parser.add_argument("--embed-url", default=os.environ.get("LINZA_EMBED_URL", "http://127.0.0.1:1234/v1"))
+    parser.add_argument("--embed-key", default=os.environ.get("LINZA_EMBED_KEY"))
     args = parser.parse_args()
 
-    summary = asyncio.run(run_smoke(args.source_vault, args.workdir))
+    summary = asyncio.run(run_smoke(
+        args.source_vault,
+        args.workdir,
+        args.embed_provider,
+        args.embed_model,
+        args.embed_url,
+        args.embed_key,
+    ))
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0
 

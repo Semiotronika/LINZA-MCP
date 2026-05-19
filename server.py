@@ -8,7 +8,6 @@ from linza_mcp import (  # noqa: F401
     LINZA_EVENT_PATTERNS,
     LINZA_SCHEMA_VERSION,
     WIKILINK_RE,
-    HashingEmbeddingProvider,
     LinzaCore,
     LinzaStorage,
     MeanCenteredEmbeddings,
@@ -33,6 +32,7 @@ from linza_mcp import (  # noqa: F401
 )
 from linza_mcp.embed import (  # noqa: F401
     EmbeddingProvider,
+    LMStudioProvider,
     OllamaProvider,
     OpenAICompatibleProvider,
     get_embedding_provider,

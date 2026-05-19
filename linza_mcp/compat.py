@@ -42,7 +42,7 @@ from .draft_map import record_memory_type as record_memory_type_from_module
 from .draft_map import role_confidence as role_confidence_from_module
 from .draft_map import select_draft_notes as select_draft_notes_from_module
 from .draft_map import split_event_sentences as split_event_sentences_from_module
-from .embed import HashingEmbeddingProvider, MeanCenteredEmbeddings
+from .embed import MeanCenteredEmbeddings
 from .graph import check_rule as check_rule_from_module
 from .graph import explain_node as explain_node_from_module
 from .graph import read_note_index as read_note_index_from_module

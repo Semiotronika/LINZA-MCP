@@ -6,7 +6,6 @@ from .compat import (
     Storage,
     LinzaStorage,
     MeanCenteredEmbeddings,
-    HashingEmbeddingProvider,
     LinzaCore,
     chunk_markdown,
     guess_note_role,
@@ -28,6 +27,7 @@ from .compat import (
     WIKILINK_RE,
     IGNORED_DIRS,
 )
+from .embed import LMStudioProvider
 from .workflows import agent_workspace
 
 __all__ = [
@@ -36,7 +36,7 @@ __all__ = [
     "Storage",
     "LinzaStorage",
     "MeanCenteredEmbeddings",
-    "HashingEmbeddingProvider",
+    "LMStudioProvider",
     "LinzaCore",
     "chunk_markdown",
     "guess_note_role",
