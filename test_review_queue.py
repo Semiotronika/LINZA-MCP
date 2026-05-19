@@ -618,7 +618,17 @@ class ReviewQueueTests(OperatorTestCase):
                         "item_type": "memory_item",
                         "memory_type": "episodic",
                         "source_path": "Product/Session.md",
-                        "summary": "A similar reviewed event should become memory.",
+                        "summary": (
+                            "Decision: keep reviewed sidecar learning examples for future agent work. "
+                            "Result: related memory cards can be previewed after quality checks."
+                        ),
+                        "evidence": (
+                            "Decision: keep reviewed sidecar learning examples for future agent work. "
+                            "Result: related memory cards can be previewed after quality checks, "
+                            "while source Markdown stays unchanged."
+                        ),
+                        "signals": ["decision", "event_flow", "result"],
+                        "recall_context": ["when continuing related work"],
                     }},
                 },
                 {
@@ -641,6 +651,77 @@ class ReviewQueueTests(OperatorTestCase):
             self.assertIn("accepted_memory_type:episodic", matches["rq-memory-product-prefix"])
             self.assertNotIn("rq-hierarchy-other-prefix", matches)
             self.assertNotIn("rq-memory-other-prefix", matches)
+        finally:
+            storage.close()
+            tmp.cleanup()
+
+    def test_assisted_memory_requires_quality_gate_not_only_type_and_prefix(self):
+        from linza_mcp.review_queue import (
+            learning_examples_from_storage,
+            select_learned_queue_matches,
+        )
+
+        tmp, vault, storage, core = self.make_core()
+        try:
+            storage.record_approved_item("memory_item", {
+                "source_path": "Product/Decision.md",
+                "memory_type": "episodic",
+                "summary": "The user accepted sidecar-only memory after review.",
+            })
+            storage.record_approved_item("memory_item", {
+                "source_path": "Product/Result.md",
+                "memory_type": "semantic",
+                "summary": "Durable context should carry source evidence and recall context.",
+            })
+            queue_items = [
+                {
+                    "id": "rq-memory-weak",
+                    "kind": "memory_item",
+                    "priority": "high",
+                    "approval": {"arguments": {
+                        "item_type": "memory_item",
+                        "memory_type": "episodic",
+                        "source_path": "Product/Loose Log.md",
+                        "summary": "name: Hypothesis",
+                        "evidence": "name: Hypothesis",
+                        "signals": ["event_flow", "hypothesis"],
+                        "recall_context": ["when continuing related work"],
+                    }},
+                },
+                {
+                    "id": "rq-memory-good",
+                    "kind": "memory_item",
+                    "priority": "high",
+                    "approval": {"arguments": {
+                        "item_type": "memory_item",
+                        "memory_type": "episodic",
+                        "source_path": "Product/Reviewed Decision.md",
+                        "summary": (
+                            "Decision: keep learned memory sidecar-only until a human accepts it. "
+                            "Result: future agents should preview memory cards before applying them."
+                        ),
+                        "evidence": (
+                            "Decision: keep learned memory sidecar-only until a human accepts it. "
+                            "Result: future agents should preview memory cards before applying them. "
+                            "This protects source notes while still letting the sidecar learn."
+                        ),
+                        "signals": ["decision", "event_flow", "result"],
+                        "recall_context": [
+                            "when reviewing future agent behavior",
+                            "when continuing related work",
+                        ],
+                    }},
+                },
+            ]
+
+            examples = learning_examples_from_storage(storage)
+            matches = select_learned_queue_matches(queue_items, examples, mode="assisted")
+
+            self.assertNotIn("rq-memory-weak", matches)
+            self.assertIn("rq-memory-good", matches)
+            self.assertIn("accepted_memory_type:episodic", matches["rq-memory-good"])
+            self.assertIn("memory_quality:specific_summary", matches["rq-memory-good"])
+            self.assertIn("memory_quality:durable_signal:decision", matches["rq-memory-good"])
         finally:
             storage.close()
             tmp.cleanup()
@@ -722,7 +803,17 @@ class ReviewQueueTests(OperatorTestCase):
                         "item_type": "memory_item",
                         "memory_type": "episodic",
                         "source_path": "Product/Session.md",
-                        "summary": "A late matching card should still enter the small preview batch.",
+                        "summary": (
+                            "Decision: keep scanning beyond the first small preview batch. "
+                            "Result: later learned memory cards can still be reviewed."
+                        ),
+                        "evidence": (
+                            "Decision: keep scanning beyond the first small preview batch. "
+                            "Result: later learned memory cards can still be reviewed when they have "
+                            "strong enough evidence and explicit durable signals."
+                        ),
+                        "signals": ["decision", "event_flow", "result"],
+                        "recall_context": ["when continuing related work"],
                     }},
                 })
 
@@ -772,6 +863,97 @@ class ReviewQueueTests(OperatorTestCase):
             self.assertEqual(result["selected_ids"], ["rq-memory-late-match"])
             self.assertEqual(fake.approved_ids, ["rq-memory-late-match"])
             self.assertEqual(result["written_paths"], [])
+        finally:
+            storage.close()
+            tmp.cleanup()
+
+    def test_apply_learned_review_queue_explains_memory_quality_skips(self):
+        from linza_mcp.review_queue import apply_learned_review_queue
+
+        class FakeCore:
+            def __init__(self, storage):
+                self.storage = storage
+                self.approved_ids = []
+                self.items = [
+                    {
+                        "id": "rq-memory-weak",
+                        "kind": "memory_item",
+                        "priority": "high",
+                        "approval": {"arguments": {
+                            "item_type": "memory_item",
+                            "memory_type": "episodic",
+                            "source_path": "Product/Loose Log.md",
+                            "summary": "какие-то ошибки были",
+                            "evidence": "какие-то ошибки были",
+                            "signals": ["action", "event_flow", "prediction_error"],
+                            "recall_context": ["when continuing related work"],
+                        }},
+                    },
+                    {
+                        "id": "rq-memory-good",
+                        "kind": "memory_item",
+                        "priority": "high",
+                        "approval": {"arguments": {
+                            "item_type": "memory_item",
+                            "memory_type": "episodic",
+                            "source_path": "Product/Reviewed Decision.md",
+                            "summary": (
+                                "Decision: hold noisy memory cards for review before durable storage. "
+                                "Result: only concrete evidence enters the preview batch."
+                            ),
+                            "evidence": (
+                                "Decision: hold noisy memory cards for review before durable storage. "
+                                "Result: only concrete evidence enters the preview batch, and weak "
+                                "log fragments are explained as skipped candidates."
+                            ),
+                            "signals": ["decision", "event_flow", "result"],
+                            "recall_context": ["when continuing related work"],
+                        }},
+                    },
+                ]
+
+            async def build_review_apply_queue(self, **kwargs):
+                return {"items": self.items, "summary": {"items": len(self.items)}}
+
+            async def approve_review_queue_items(self, item_ids, **kwargs):
+                self.approved_ids = list(item_ids)
+                return {
+                    "status": "preview",
+                    "written_paths": [],
+                    "summary": {
+                        "requested": len(item_ids),
+                        "matched": len(item_ids),
+                        "applied": 0,
+                        "previewed": len(item_ids),
+                    },
+                }
+
+        tmp, vault, storage, core = self.make_core()
+        try:
+            storage.record_approved_item("memory_item", {
+                "source_path": "Product/Decision.md",
+                "memory_type": "episodic",
+                "summary": "Accepted memory example one.",
+            })
+            storage.record_approved_item("memory_item", {
+                "source_path": "Product/Result.md",
+                "memory_type": "semantic",
+                "summary": "Accepted memory example two.",
+            })
+            fake = FakeCore(storage)
+
+            result = asyncio.run(apply_learned_review_queue(
+                fake,
+                mode="assisted",
+                limit=10,
+                dry_run=True,
+                include_memory=True,
+            ))
+
+            self.assertEqual(result["selected_ids"], ["rq-memory-good"])
+            self.assertEqual(fake.approved_ids, ["rq-memory-good"])
+            self.assertEqual(result["skipped_rules"][0]["id"], "rq-memory-weak")
+            self.assertIn("blocked_memory_quality_gate", result["skipped_rules"][0]["reasons"])
         finally:
             storage.close()
             tmp.cleanup()

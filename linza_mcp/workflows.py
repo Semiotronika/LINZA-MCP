@@ -660,6 +660,7 @@ def _growth_human_view(growth: dict[str, Any]) -> dict[str, Any]:
     counts = learning.get("counts", {}) if isinstance(learning, dict) else {}
     selected_ids = growth.get("selected_ids", []) if isinstance(growth, dict) else []
     selected_rules = growth.get("selected_rules", []) if isinstance(growth, dict) else []
+    skipped_rules = growth.get("skipped_rules", []) if isinstance(growth, dict) else []
     total_examples = int(learning.get("total_examples", 0) or 0)
     status = str(growth.get("status", "unknown"))
     if total_examples <= 0:
@@ -690,6 +691,14 @@ def _growth_human_view(growth: dict[str, Any]) -> dict[str, Any]:
                     f"{item.get('id', '')}: {', '.join(item.get('reasons', [])[:3])}"
                     for item in selected_rules[:10]
                 ] or selected_ids[:10],
+            },
+            {
+                "title": "Skipped cards",
+                "summary": f"{len(skipped_rules)} learned candidates were held back by safety or quality gates.",
+                "items": [
+                    f"{item.get('id', '')}: {', '.join(item.get('reasons', [])[:3])}"
+                    for item in skipped_rules[:10]
+                ],
             },
             {
                 "title": "Safety",

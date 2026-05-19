@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections import Counter, defaultdict
 from typing import Any, Dict
 
@@ -1151,6 +1152,127 @@ def queue_item_signature(item_type: str, arguments: Dict[str, Any]) -> str:
     return ""
 
 
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value] if value.strip() else []
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item).strip()]
+    return []
+
+
+def _word_count(text: str) -> int:
+    return len(re.findall(r"\w+", str(text or ""), flags=re.UNICODE))
+
+
+def _is_generic_memory_summary(summary: str) -> bool:
+    normalized = str(summary or "").strip().lower()
+    if not normalized:
+        return True
+    if normalized.endswith(":"):
+        return True
+    if re.match(r"^[a-z_ -]{2,24}:\s*[a-z_ -]{2,40}$", normalized, re.IGNORECASE):
+        return True
+    if re.search(r"\b(name|title|type|kind|label)\s*:", normalized, re.IGNORECASE):
+        return True
+    if re.search(r"\b(something|some kind of|unknown|todo|placeholder)\b", normalized, re.IGNORECASE):
+        return True
+    if re.search(r"\bкакие-то\b|\bкакая-то\b|\bчто-то\b|\bнепонятно\b|\bзаглушк", normalized, re.IGNORECASE):
+        return True
+    return False
+
+
+def _memory_growth_quality_reasons(arguments: Dict[str, Any]) -> list[str]:
+    summary = str(arguments.get("summary", "")).strip()
+    evidence = str(arguments.get("evidence", "")).strip()
+    memory_type = str(arguments.get("memory_type", "")).strip().lower()
+    signals = set(_string_list(arguments.get("signals", [])))
+    recall_context = _string_list(arguments.get("recall_context", []))
+    evolution = arguments.get("evolution", {})
+    related_sources = evolution.get("related_sources", []) if isinstance(evolution, dict) else []
+
+    if _is_generic_memory_summary(summary):
+        return []
+    if _word_count(summary) < 8 or len(summary) < 50:
+        return []
+    if _word_count(evidence) < 10 or len(evidence) < 80:
+        return []
+
+    durable_signals = sorted(signals & {
+        "decision",
+        "action",
+        "result",
+        "procedural_rule",
+        "prospective_task",
+        "prediction_error",
+        "procedure",
+        "future_intention",
+    })
+    quality_reasons = ["memory_quality:specific_summary", "memory_quality:specific_evidence"]
+    if recall_context:
+        quality_reasons.append("memory_quality:recall_context")
+    if related_sources:
+        quality_reasons.append("memory_quality:related_sources")
+
+    if memory_type in {"procedural", "prospective"} and durable_signals:
+        quality_reasons.append(f"memory_quality:durable_signal:{durable_signals[0]}")
+        return quality_reasons
+    if len(durable_signals) >= 2:
+        quality_reasons.append(f"memory_quality:durable_signal:{durable_signals[0]}")
+        quality_reasons.append("memory_quality:multiple_durable_signals")
+        return quality_reasons
+    if memory_type == "semantic" and "semantic_candidate" in signals and len(evidence) >= 160:
+        quality_reasons.append("memory_quality:semantic_candidate")
+        return quality_reasons
+    return []
+
+
+def _memory_learning_base_reasons(
+    arguments: Dict[str, Any],
+    examples: Dict[str, Any],
+    mode: str,
+    priority: str,
+    shared_prefixes: list[str],
+) -> list[str]:
+    memory_type = str(arguments.get("memory_type", ""))
+    memory_types = set(examples.get("memory_types", []))
+    counts = examples.get("counts", {})
+    if (
+        mode == "assisted"
+        and memory_type in memory_types
+        and counts.get("memory_item", 0) >= 2
+        and shared_prefixes
+        and priority in {"high", "medium"}
+    ):
+        return [f"accepted_memory_type:{memory_type}", f"accepted_memory_prefix:{shared_prefixes[0]}"]
+    if mode == "autopilot" and memory_type in memory_types:
+        return [f"autopilot_memory_type_example:{memory_type}"]
+    return []
+
+
+def _memory_learning_rejection_reasons(item: Dict[str, Any], examples: Dict[str, Any], mode: str) -> list[str]:
+    if mode == "review":
+        return []
+    arguments = item.get("approval", {}).get("arguments", {})
+    item_type = arguments.get("item_type") or item.get("kind")
+    if item_type != "memory_item":
+        return []
+    if queue_item_signature(str(item_type), arguments) in set(examples.get("approved_signatures", [])):
+        return []
+    rules = examples.get("rules", {}) if isinstance(examples.get("rules", {}), dict) else {}
+    learned_prefixes = set(rules.get("path_prefixes", []))
+    shared_prefixes = sorted(approved_path_prefixes(str(item_type), arguments) & learned_prefixes)
+    base_reasons = _memory_learning_base_reasons(
+        arguments,
+        examples,
+        mode,
+        str(item.get("priority", "medium")),
+        shared_prefixes,
+    )
+    if base_reasons and not _memory_growth_quality_reasons(arguments):
+        return ["blocked_memory_quality_gate", *base_reasons]
+    return []
+
+
 def _learning_match_reasons(item: Dict[str, Any], examples: Dict[str, Any], mode: str) -> list[str]:
     if mode == "review":
         return []
@@ -1163,7 +1285,6 @@ def _learning_match_reasons(item: Dict[str, Any], examples: Dict[str, Any], mode
     domains = set(examples.get("domains", []))
     hierarchy_domains = set(examples.get("hierarchy_domains", []))
     relations = set(examples.get("relations", []))
-    memory_types = set(examples.get("memory_types", []))
     counts = examples.get("counts", {})
     rules = examples.get("rules", {}) if isinstance(examples.get("rules", {}), dict) else {}
     material_type_names = set(rules.get("material_type_names", []))
@@ -1207,12 +1328,11 @@ def _learning_match_reasons(item: Dict[str, Any], examples: Dict[str, Any], mode
         if mode == "autopilot" and counts.get("causal_link", 0) >= 1 and (not relation or relation in relations):
             reasons.append("autopilot_causal_after_examples")
     if item_type == "memory_item":
-        memory_type = str(arguments.get("memory_type", ""))
-        if mode == "assisted" and memory_type in memory_types and counts.get("memory_item", 0) >= 2 and shared_prefixes and priority in {"high", "medium"}:
-            reasons.append(f"accepted_memory_type:{memory_type}")
-            reasons.append(f"accepted_memory_prefix:{shared_prefixes[0]}")
-        if mode == "autopilot" and memory_type in memory_types:
-            reasons.append(f"autopilot_memory_type_example:{memory_type}")
+        base_reasons = _memory_learning_base_reasons(arguments, examples, mode, priority, shared_prefixes)
+        quality_reasons = _memory_growth_quality_reasons(arguments)
+        if base_reasons and quality_reasons:
+            reasons.extend(base_reasons)
+            reasons.extend(quality_reasons)
     return reasons
 
 
@@ -1273,6 +1393,12 @@ async def apply_learned_review_queue(
     )
     examples = learning_examples_from_storage(core.storage)
     all_selected_matches = select_learned_queue_matches(queue.get("items", []), examples, normalized_mode)
+    skipped_matches: Dict[str, list[str]] = {}
+    for item in queue.get("items", []):
+        item_id = str(item.get("id", ""))
+        rejection_reasons = _memory_learning_rejection_reasons(item, examples, normalized_mode)
+        if item_id and rejection_reasons:
+            skipped_matches[item_id] = rejection_reasons
     selected_ids = list(all_selected_matches)[:batch_limit]
     selected_matches = {
         item_id: all_selected_matches[item_id]
@@ -1287,6 +1413,10 @@ async def apply_learned_review_queue(
         "selected_rules": [
             {"id": item_id, "reasons": reasons}
             for item_id, reasons in selected_matches.items()
+        ],
+        "skipped_rules": [
+            {"id": item_id, "reasons": reasons}
+            for item_id, reasons in list(skipped_matches.items())[:20]
         ],
         "learning": examples,
         "queue_summary": queue.get("summary", {}),
