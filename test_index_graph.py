@@ -128,6 +128,32 @@ class IndexGraphTests(OperatorTestCase):
             storage.close()
             tmp.cleanup()
 
+    def test_search_blocks_stale_source_index(self):
+        import os
+        import time
+
+        tmp, vault, storage, core = self.make_core()
+        try:
+            note = vault / "Project.md"
+            note.write_text("Decision: index the first version.\n", encoding="utf-8")
+            asyncio.run(core.index_vault(force=True))
+
+            note.write_text(
+                "Decision: index the first version.\nAction: changed after indexing.\n",
+                encoding="utf-8",
+            )
+            changed_time = time.time() + 5
+            os.utime(note, (changed_time, changed_time))
+
+            result = asyncio.run(core.search("changed after indexing", top_k=3))
+
+            self.assertEqual(result["error"], "source_index_stale")
+            self.assertEqual(result["sync"]["status"], "stale")
+            self.assertEqual(result["sync"]["changed_count"], 1)
+        finally:
+            storage.close()
+            tmp.cleanup()
+
     def test_bridge_pair_guard_skips_large_pairwise_rebuild(self):
         tmp, vault, storage, core = self.make_core()
         try:

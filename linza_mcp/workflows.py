@@ -33,6 +33,7 @@ SUPPORTED_AGENT_WORKSPACE_ACTIONS = [
     "doctor",
 ]
 
+SOURCE_INDEX_ACTIONS = {"map", "teach", "grow", "connect"}
 TEACHABLE_REVIEW_KINDS = ("domain", "material_type", "hierarchy_link", "causal_link", "memory_item")
 TEACH_KIND_ORDER = {kind: index for index, kind in enumerate(TEACHABLE_REVIEW_KINDS)}
 TEACH_PRIORITY_SCORE = {"high": 3, "medium": 2, "low": 1}
@@ -198,6 +199,55 @@ def _attach_workspace_state(core, response: dict[str, Any]) -> dict[str, Any]:
     if isinstance(response, dict):
         response.setdefault("workspace_state", _workspace_state(core))
     return response
+
+
+def _source_index_preflight(core, action: str) -> dict[str, Any] | None:
+    if action not in SOURCE_INDEX_ACTIONS:
+        return None
+    state = _workspace_state(core)
+    sync = state["sync"]
+    embeddings = state["embeddings"]
+    if sync["status"] == "stale":
+        return {
+            "tool": "agent_workspace",
+            "action": action,
+            "status": "blocked",
+            "error": "source_index_stale",
+            "read_only": True,
+            "message": sync["message"],
+            "human_view": {
+                "title": "Index refresh needed",
+                "summary": "LINZA stopped before using a stale graph or outdated semantic bridges.",
+                "next_steps": ["Run index_all, then repeat this action."],
+            },
+            "workspace_state": state,
+            "policy": [
+                "agent_workspace checks source freshness before graph-dependent actions",
+                "stale source files must be reindexed before map, teach, grow, or connect",
+                "source note bodies stay unchanged",
+            ],
+        }
+    if embeddings["status"] == "needs_reindex":
+        return {
+            "tool": "agent_workspace",
+            "action": action,
+            "status": "blocked",
+            "error": "embedding_signature_mismatch",
+            "read_only": True,
+            "message": embeddings["message"],
+            "human_view": {
+                "title": "Embedding reindex needed",
+                "summary": "LINZA found stored vectors from another provider, model, or dimension.",
+                "next_steps": ["Run index_all with force=true, then repeat this action."],
+            },
+            "workspace_state": state,
+            "policy": [
+                "LINZA refuses graph-dependent actions when embedding signatures are mixed",
+                "one sidecar must use one embedding provider/model/dimension at a time",
+                "source note bodies stay unchanged",
+            ],
+        }
+    return None
 
 
 def doctor(core) -> dict[str, Any]:
@@ -1009,6 +1059,9 @@ async def agent_workspace(
 ) -> dict[str, Any]:
     normalized_action = str(action or "").strip()
     safe_limit = _safe_limit(limit)
+    preflight = _source_index_preflight(core, normalized_action)
+    if preflight is not None:
+        return preflight
 
     if normalized_action == "ingest_artifacts":
         return _attach_workspace_state(core, ingest_artifacts(

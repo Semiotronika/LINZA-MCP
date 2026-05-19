@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.4 - 2026-05-20
+
+Index safety hardening before broader catalog submission.
+
+### Added
+
+- Runtime embedding dimension pinning after the first provider call, so a
+  sidecar reindexes even when the configured model name stays the same but the
+  returned vector dimension changes.
+- Source-index preflight for graph-dependent `agent_workspace` actions. `map`,
+  `teach`, `grow`, and `connect` now stop before using stale source files or
+  mixed embedding signatures.
+
+### Fixed
+
+- `search` now refuses stale Markdown indexes instead of returning results from
+  old file content after source notes were edited, added, or removed.
+
 ## 0.1.3 - 2026-05-20
 
 Official MCP Registry identity fix.

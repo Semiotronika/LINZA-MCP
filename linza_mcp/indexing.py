@@ -32,6 +32,34 @@ def embedding_signature(core) -> tuple[str, str, int | None]:
     return provider_name, model, int(dim) if dim is not None else None
 
 
+def validate_embedding_batch(core, embeddings: list[list[float]]) -> int | None:
+    """Pin and validate the runtime embedding dimension after a provider call."""
+    if not embeddings:
+        return None
+    dims = {len(vector) for vector in embeddings}
+    if len(dims) != 1:
+        raise RuntimeError(
+            "Embedding provider returned vectors with mixed dimensions. "
+            "Use one embedding model per LINZA sidecar and run index_all with force=true."
+        )
+    dim = dims.pop()
+    expected_dim = getattr(core.embed, "dim", None)
+    if expected_dim is not None and int(expected_dim) != dim:
+        raise RuntimeError(
+            "Embedding provider dimension changed during this session. "
+            "Restart LINZA and run index_all with force=true after changing the embedding model."
+        )
+    setattr(core.embed, "dim", dim)
+    return dim
+
+
+async def ensure_embedding_signature(core) -> tuple[str, str, int | None]:
+    """Probe the provider once when its dimension is not known yet."""
+    if getattr(core.embed, "dim", None) is None:
+        await compute_embeddings(core, ["LINZA embedding signature probe"])
+    return embedding_signature(core)
+
+
 def _record_matches_embedding_signature(record: dict[str, Any], core) -> bool:
     if not record.get("embedding"):
         return False
@@ -193,6 +221,7 @@ def vault_sync_status(core, sample_limit: int = 20) -> dict[str, Any]:
 async def compute_embeddings(core, texts: List[str]) -> Tuple[List[List[float]], List[List[float]]]:
     """Return raw and current mean-centered embeddings for texts."""
     raw = await core.embed.embed(texts)
+    validate_embedding_batch(core, raw)
     if core.centerer.is_fitted:
         centered = core.centerer.transform(raw)
     else:
@@ -268,10 +297,17 @@ async def index_vault(core, force: bool = False) -> None:
     for indexed_path in core.storage.list_files():
         if indexed_path not in current_paths:
             core.storage.delete_file(indexed_path)
+    if not files:
+        core.centerer.corpus_mean = None
+        core.centerer.is_fitted = False
+        core.storage.clear_corpus_mean()
+        core.storage.update_bridges([])
+        logging.info("Indexed 0 files, cleared bridges")
+        return
 
     all_raw: list[list[float]] = []
     file_data: list[tuple[str, str, float, list[float], str]] = []
-    provider_name, model, expected_dim = embedding_signature(core)
+    provider_name, model, expected_dim = await ensure_embedding_signature(core)
 
     for file_path in files:
         rel = str(file_path.relative_to(vault)).replace("\\", "/")
@@ -658,6 +694,16 @@ async def search(
             "message": index_status["message"],
             "embedding_index": index_status,
         }
+    sync_status = vault_sync_status(core)
+    if sync_status["status"] == "stale":
+        return {
+            "results": [],
+            "profile": profile_name,
+            "explanation": None,
+            "error": "source_index_stale",
+            "message": sync_status["message"],
+            "sync": sync_status,
+        }
 
     paths, vectors = zip(*all_emb)
     try:
@@ -904,6 +950,7 @@ __all__ = [
     "create_profile",
     "embedding_index_status",
     "embedding_signature",
+    "ensure_embedding_signature",
     "file_features",
     "get_profile_vector",
     "get_snippet",
@@ -918,5 +965,6 @@ __all__ = [
     "search",
     "similarity_confidence",
     "suggest_links",
+    "validate_embedding_batch",
     "vault_sync_status",
 ]

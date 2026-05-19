@@ -69,6 +69,9 @@ class AgentWorkspaceTests(OperatorTestCase):
             tmp.cleanup()
 
     def test_agent_workspace_reports_stale_source_folder_state(self):
+        import os
+        import time
+
         tmp, vault, storage, core = self.make_core()
         try:
             note = vault / "Project Log.md"
@@ -76,11 +79,18 @@ class AgentWorkspaceTests(OperatorTestCase):
             asyncio.run(core.index_vault(force=True))
 
             note.write_text("Decision: index this note first.\nAction: changed after index.\n", encoding="utf-8")
+            changed_time = time.time() + 5
+            os.utime(note, (changed_time, changed_time))
             result = asyncio.run(core.agent_workspace(action="search_memory", query="decision"))
 
             self.assertEqual(result["workspace_state"]["sync"]["status"], "stale")
             self.assertEqual(result["workspace_state"]["sync"]["changed_count"], 1)
             self.assertTrue(result["workspace_state"]["warnings"])
+
+            blocked = asyncio.run(core.agent_workspace(action="map", limit=5))
+            self.assertEqual(blocked["status"], "blocked")
+            self.assertEqual(blocked["error"], "source_index_stale")
+            self.assertEqual(blocked["workspace_state"]["sync"]["status"], "stale")
 
             doctor = asyncio.run(core.agent_workspace(action="doctor"))
             source_sync = next(item for item in doctor["checks"] if item["id"] == "source_sync")

@@ -58,6 +58,36 @@ class OperatorSurfaceTests(OperatorTestCase):
             storage.close()
             tmp.cleanup()
 
+    def test_index_recomputes_when_same_model_dimension_changes(self):
+        class FixedEmbeddingProvider:
+            def __init__(self, model: str, vector: list[float]):
+                self.model = model
+                self.vector = vector
+
+            async def embed(self, texts: list[str]) -> list[list[float]]:
+                return [list(self.vector) for _ in texts]
+
+        tmp = tempfile.TemporaryDirectory()
+        vault = Path(tmp.name)
+        (vault / "Alpha.md").write_text("alpha beta gamma", encoding="utf-8")
+        storage = Storage(vault / ".linza" / "linza.db")
+        try:
+            first_core = LinzaCore(vault, storage, FixedEmbeddingProvider("same-name", [1.0, 0.0]))
+            asyncio.run(first_core.index_vault())
+            first = storage.get_file_metadata("Alpha.md")
+            self.assertEqual(first["embedding_model"], "same-name")
+            self.assertEqual(first["embedding_dim"], 2)
+
+            second_core = LinzaCore(vault, storage, FixedEmbeddingProvider("same-name", [0.0, 1.0, 0.0]))
+            asyncio.run(second_core.index_vault(force=False))
+            second = storage.get_file_metadata("Alpha.md")
+            self.assertEqual(second["embedding_model"], "same-name")
+            self.assertEqual(second["embedding_dim"], 3)
+            self.assertEqual(second["embedding"], [0.0, 1.0, 0.0])
+        finally:
+            storage.close()
+            tmp.cleanup()
+
     def test_direct_module_imports_preserve_core_contract(self):
         from linza_mcp.diagnostics import build_bases_plan_markdown as direct_bases_plan
         from linza_mcp.diagnostics import build_diagnostic_markdown as direct_diagnostic_report
