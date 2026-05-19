@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools >= 77.0.3", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "linza-mcp"
+version = "0.1.0"
+description = "Local-first MCP sidecar for agent workspaces, artifacts, review cards, and context export."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+  { name = "Semiotronika" }
+]
+keywords = [
+  "mcp",
+  "model-context-protocol",
+  "ai-agents",
+  "knowledge-management",
+  "local-first",
+  "semantic-search",
+  "sqlite"
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Text Processing :: Indexing",
+]
+dependencies = [
+  "aiohttp >= 3.9",
+  "anyio >= 4.0",
+  "mcp >= 1.0.0",
+  "numpy >= 1.24",
+  "PyYAML >= 6.0",
+]
+
+[project.optional-dependencies]
+pdf = [
+  "pypdf >= 4.0",
+]
+dev = [
+  "build >= 1.0",
+  "twine >= 5.0",
+]
+
+[project.scripts]
+linza-mcp = "linza_mcp.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Semiotronika/LINZA-MCP"
+Repository = "https://github.com/Semiotronika/LINZA-MCP"
+Issues = "https://github.com/Semiotronika/LINZA-MCP/issues"
+Changelog = "https://github.com/Semiotronika/LINZA-MCP/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+include = ["linza_mcp*"]

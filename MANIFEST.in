@@ -1,0 +1,17 @@
+include README.md
+include README_EN.md
+include LICENSE
+include SECURITY.md
+include CHANGELOG.md
+include server.json
+include glama.json
+include LINZA_TOOL_CATALOG.md
+recursive-include agent-pack *.md
+recursive-include examples *.md *.json
+recursive-include scripts *.md *.py *.ps1
+exclude AGENTS.md
+recursive-exclude .internal-scripts *
+recursive-exclude .test-tmp *
+recursive-exclude .linza *
+recursive-exclude __pycache__ *
+global-exclude *.py[cod] *.db *.db-shm *.db-wal

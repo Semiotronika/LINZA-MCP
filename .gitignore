@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.test-tmp/
+.linza/
+.internal-scripts/
+AGENTS.md
+build/
+dist/
+*.egg-info/
+*.db
+*.db-shm
+*.db-wal

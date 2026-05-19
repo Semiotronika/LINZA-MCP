@@ -1,0 +1,49 @@
+{
+  "id": "trace-example-review-gate",
+  "task": "Import sample artifacts and propose review cards without editing source notes.",
+  "expected_outcome": "Artifacts are stored in the sidecar, review cards are generated, and source Markdown files remain unchanged.",
+  "status": "completed",
+  "context_tokens": 4200,
+  "metadata": {
+    "context_budget": 2000,
+    "allowed_write_prefixes": [
+      ".linza/"
+    ]
+  },
+  "tool_calls": [
+    {
+      "name": "agent_workspace.ingest_artifacts",
+      "status": "ok",
+      "arguments": {
+        "source_kind": "sample_artifact"
+      }
+    },
+    {
+      "name": "agent_workspace.review_next",
+      "status": "ok"
+    },
+    {
+      "name": "agent_workspace.apply_review_items",
+      "status": "ok",
+      "arguments": {
+        "dry_run": true
+      }
+    }
+  ],
+  "writes": [
+    {
+      "path": ".linza/linza.db",
+      "kind": "sidecar"
+    }
+  ],
+  "tests": [
+    {
+      "name": "source_notes_unchanged",
+      "status": "passed"
+    }
+  ],
+  "result": "Result: raw artifacts stayed in the sidecar and review cards required dry-run before apply.",
+  "changed_files": [
+    ".linza/linza.db"
+  ]
+}
