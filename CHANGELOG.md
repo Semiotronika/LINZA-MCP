@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2 - 2026-05-20
+
+Registry metadata fix before catalog submission.
+
+### Fixed
+
+- Shortened the official MCP Registry `server.json` description so it passes
+  the registry length limit while keeping the same package and safety contract.
+
 ## 0.1.1 - 2026-05-20
 
 Release hardening before catalog submission.
