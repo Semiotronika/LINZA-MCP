@@ -156,7 +156,7 @@ $env:LINZA_EMBED_MODEL="your-embedding-model-name"
 
 ## Как происходит первое взаимодействие
 
-Обычно агент начинает с `agent_workspace(action="doctor")` или `guide_next_steps`. Человек должен видеть короткий статус:
+Обычно агент начинает с `agent_workspace(action="doctor")` или `guide_next_steps(language="ru")`. Человек должен видеть короткий статус:
 
 ```text
 LINZA готова
@@ -294,6 +294,7 @@ python -m unittest test_agent_workspace.AgentWorkspaceTests.test_examples_sample
 | `LINZA_BRIDGE_THRESHOLD` | Порог semantic bridge; по умолчанию `0.55` |
 | `LINZA_DEFAULT_PROFILE` | Имя базового search-профиля; по умолчанию `general` |
 | `LINZA_TOOL_SURFACE` | `default` (15 инструментов) или `advanced` |
+| `LINZA_LANGUAGE` | Язык человеческого слоя в `guide_next_steps`: `auto`, `ru`, `en` |
 
 ---
 

@@ -65,6 +65,12 @@
           "description": "Tool surface. Allowed values: default, advanced. Default: default.",
           "isRequired": false,
           "format": "string"
+        },
+        {
+          "name": "LINZA_LANGUAGE",
+          "description": "Human-facing guide language. Allowed values: auto, en, ru. Default: auto.",
+          "isRequired": false,
+          "format": "string"
         }
       ]
     }

@@ -60,7 +60,8 @@ human name into visible YAML.
 
 The full technical tool guide is opt-in. `guide_next_steps` should return the
 human `user_view` by default and include raw tool details only when an agent asks
-for `include_tool_guide=true`.
+for `include_tool_guide=true`. Agents should pass `language="en"` or
+`language="ru"` when the human language is known.
 
 ## Audience Contract
 

@@ -240,6 +240,7 @@ class LinzaMCPServer:
                     "limit": {"type": "integer", "default": 40},
                     "include_memory": {"type": "boolean", "default": False},
                     "include_tool_guide": {"type": "boolean", "default": False},
+                    "language": {"type": "string", "enum": ["auto", "en", "ru"], "default": "auto"},
                 }),
                 _tool("agent_workspace", "One facade for workspace maps, teaching, supervised growth, artifact inbox, analysis, review, graph connect, and context export.", {
                     "action": {
@@ -556,6 +557,7 @@ class LinzaMCPServer:
                 limit=int(arguments.get("limit", 40)),
                 include_memory=bool(arguments.get("include_memory", False)),
                 include_tool_guide=bool(arguments.get("include_tool_guide", False)),
+                language=arguments.get("language") or self.config.get("language", "auto"),
             ))
         if name == "agent_workspace":
             return _json_result(await self.core.agent_workspace(
@@ -719,6 +721,7 @@ def load_config_from_env() -> Dict[str, Any]:
         "bridge_threshold": float(os.environ.get("LINZA_BRIDGE_THRESHOLD", "0.55")),
         "default_profile": os.environ.get("LINZA_DEFAULT_PROFILE", "general"),
         "tool_surface": os.environ.get("LINZA_TOOL_SURFACE", "default"),
+        "language": os.environ.get("LINZA_LANGUAGE", "auto"),
     }
 
 

@@ -167,7 +167,7 @@ If you switch embedding provider or model dimension, run a full reindex. Vectors
 
 ## First Output Example
 
-Agents usually start with `agent_workspace(action="doctor")` or `guide_next_steps`. A human should see a short status, not a raw JSON wall:
+Agents usually start with `agent_workspace(action="doctor")` or `guide_next_steps(language="en")`. A human should see a short status, not a raw JSON wall:
 
 ```text
 LINZA is ready
@@ -307,6 +307,7 @@ python -m unittest test_agent_workspace.AgentWorkspaceTests.test_examples_sample
 | `LINZA_BRIDGE_THRESHOLD` | Semantic bridge threshold; default `0.55` |
 | `LINZA_DEFAULT_PROFILE` | Default search profile name; default `general` |
 | `LINZA_TOOL_SURFACE` | `default` (15 tools) or `advanced` |
+| `LINZA_LANGUAGE` | Human-facing guide language: `auto`, `en`, or `ru` |
 
 ---
 

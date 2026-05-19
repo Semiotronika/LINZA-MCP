@@ -24,6 +24,9 @@ Use these first:
 3. `agent_workspace` for workspace maps, teaching, supervised growth, artifacts,
    trace review, memory search, review cards, graph connect, and context export.
 
+When calling `guide_next_steps`, pass the human's language when known:
+`language="en"` for English sessions and `language="ru"` for Russian sessions.
+
 When the human asks "what is here", "where should we start", or "what should
 the agent do next", use `agent_workspace(action="map")` first. Present the
 human view, then use the agent view only to choose the next precise action.

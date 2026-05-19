@@ -596,6 +596,7 @@ class LinzaCore:
         limit: int = 40,
         include_memory: bool = False,
         include_tool_guide: bool = False,
+        language: str = "auto",
     ) -> dict[str, Any]:
         return await guide_next_steps_from_module(
             self,
@@ -604,6 +605,7 @@ class LinzaCore:
             limit=limit,
             include_memory=include_memory,
             include_tool_guide=include_tool_guide,
+            language=language,
         )
 
     async def agent_workspace(

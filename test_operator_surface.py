@@ -245,6 +245,10 @@ class OperatorSurfaceTests(OperatorTestCase):
             self.assertFalse(
                 tools["guide_next_steps"].inputSchema["properties"]["include_tool_guide"]["default"],
             )
+            self.assertEqual(
+                tools["guide_next_steps"].inputSchema["properties"]["language"]["enum"],
+                ["auto", "en", "ru"],
+            )
             self.assertIn("action", tools["agent_workspace"].inputSchema["required"])
             self.assertIn("ingest_artifacts", tools["agent_workspace"].inputSchema["properties"]["action"]["enum"])
             self.assertIn("map", tools["agent_workspace"].inputSchema["properties"]["action"]["enum"])
@@ -278,6 +282,25 @@ class OperatorSurfaceTests(OperatorTestCase):
                 advanced_server.storage.close()
         finally:
             server.storage.close()
+            tmp.cleanup()
+
+    def test_guide_next_steps_renders_localized_human_view(self):
+        tmp, vault, storage, core = self.make_core()
+        try:
+            guide_en = asyncio.run(core.guide_next_steps(language="en"))
+            guide_ru = asyncio.run(core.guide_next_steps(language="ru"))
+
+            self.assertEqual(guide_en["language"], "en")
+            self.assertEqual(guide_en["user_view"]["language"], "en")
+            self.assertEqual(guide_en["user_view"]["title"], "Maintain the map")
+            self.assertIn("accept the card", guide_en["user_view"]["how_to_answer"])
+
+            self.assertEqual(guide_ru["language"], "ru")
+            self.assertEqual(guide_ru["user_view"]["language"], "ru")
+            self.assertIn("карту", guide_ru["user_view"]["title"].lower())
+            self.assertIn("принять карточку", guide_ru["user_view"]["how_to_answer"])
+        finally:
+            storage.close()
             tmp.cleanup()
 
     def test_cli_version_and_help_do_not_start_server(self):
@@ -413,6 +436,7 @@ class OperatorSurfaceTests(OperatorTestCase):
                 "LINZA_BRIDGE_THRESHOLD",
                 "LINZA_DEFAULT_PROFILE",
                 "LINZA_TOOL_SURFACE",
+                "LINZA_LANGUAGE",
             },
         )
         glama = json.loads((root / "glama.json").read_text(encoding="utf-8"))
@@ -422,6 +446,7 @@ class OperatorSurfaceTests(OperatorTestCase):
         from linza_mcp.embed import LMStudioProvider, get_embedding_provider
         from linza_mcp.server import load_config_from_env
         self.assertEqual(load_config_from_env()["embed_provider"], "lmstudio")
+        self.assertEqual(load_config_from_env()["language"], "auto")
         self.assertIsInstance(get_embedding_provider(""), LMStudioProvider)
         self.assertIsInstance(
             get_embedding_provider("lmstudio", "http://127.0.0.1:1234/v1"),

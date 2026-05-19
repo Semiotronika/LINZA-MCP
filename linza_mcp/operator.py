@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections import Counter
 from typing import Any
 
@@ -79,6 +80,83 @@ STAGE_PRESENTATION = {
         "writes": "Без подтверждения LINZA ничего не меняет в заметках.",
     },
 }
+
+
+STAGE_PRESENTATION_EN = {
+    "review_domains": {
+        "title": "Review the main areas",
+        "question": "What broad themes are actually present in this folder?",
+        "plain_next": "LINZA will show a few groups of notes. You decide whether each group is a real area, how to name it, or whether to skip it for now.",
+        "writes": "After approval, LINZA may write only compact `domains` YAML. Note bodies are not changed.",
+    },
+    "review_roles": {
+        "title": "Review material types",
+        "question": "What kinds of material are actually present here, and how should they be named?",
+        "plain_next": "LINZA first shows discovered material groups and asks for a human name. Only after that does it create separate review cards for writing `role` into YAML.",
+        "writes": "The material-type name is stored in `.linza` first. Visible YAML `role: ...` appears only through a separate approved card. Note bodies are not changed.",
+    },
+    "review_hierarchy": {
+        "title": "Build a soft hierarchy",
+        "question": "Which notes are central, and which notes belong under them?",
+        "plain_next": "LINZA will suggest central notes inside accepted areas. Approve only the links that match your map.",
+        "writes": "Approved hierarchy is stored in `.linza`; it is not written into Markdown note bodies.",
+    },
+    "review_causal_links": {
+        "title": "Check cause and effect",
+        "question": "What actually led to what, and what is only nearby?",
+        "plain_next": "LINZA will show cautious hypotheses over facts, decisions, actions, and results. Accept a small number confidently.",
+        "writes": "Causal links are stored in `.linza` only after explicit approval.",
+    },
+    "review_memory": {
+        "title": "Choose memory for future agents",
+        "question": "What should future sessions remember as durable context?",
+        "plain_next": "LINZA will suggest short memory fragments. You can accept, rephrase, or skip them.",
+        "writes": "Memory is stored in `.linza`; source notes are not changed.",
+    },
+    "maintenance": {
+        "title": "Maintain the map",
+        "question": "What changed in the folder, and does the map need another review?",
+        "plain_next": "When new notes arrive, LINZA will again show only the next small step.",
+        "writes": "Without approval, LINZA changes nothing in your notes.",
+    },
+}
+
+
+HOW_TO_ANSWER = {
+    "ru": [
+        "принять карточку",
+        "попросить заменить название или тип материала",
+        "пропустить карточку",
+        "попросить показать доказательства",
+    ],
+    "en": [
+        "accept the card",
+        "ask to rename the area or material type",
+        "skip the card",
+        "ask to show the evidence",
+    ],
+}
+
+
+def _resolve_language(core: Any, language: str | None) -> str:
+    requested = str(language or "").strip().lower()
+    if requested.startswith("ru"):
+        return "ru"
+    if requested.startswith("en"):
+        return "en"
+
+    config = getattr(core, "config", {}) or {}
+    configured = str(config.get("language") or os.environ.get("LINZA_LANGUAGE") or "").strip().lower()
+    if configured.startswith("ru"):
+        return "ru"
+    if configured.startswith("en"):
+        return "en"
+    return "ru"
+
+
+def _presentation(stage_id: str, language: str) -> dict[str, str]:
+    source = STAGE_PRESENTATION if language == "ru" else STAGE_PRESENTATION_EN
+    return source.get(stage_id, source["maintenance"])
 
 
 TOOL_GUIDE = {
@@ -432,7 +510,7 @@ def _analysis_stage_for_workflow(stage_id: str) -> str:
     }.get(stage_id, "all")
 
 
-def _stage_sequence(stage_id: str, approved: dict[str, int], pending: dict[str, int]) -> list[dict[str, Any]]:
+def _stage_sequence(stage_id: str, approved: dict[str, int], pending: dict[str, int], language: str) -> list[dict[str, Any]]:
     order = [step["id"] for step in WORKFLOW_STEPS]
     current_index = order.index(stage_id) if stage_id in order else len(order)
     result = []
@@ -447,11 +525,12 @@ def _stage_sequence(stage_id: str, approved: dict[str, int], pending: dict[str, 
             status = "waiting"
         stage_pending = sum(pending.get(kind, 0) for kind in step.get("kinds", [step["kind"]]))
         stage_approved = sum(approved.get(kind, 0) for kind in step.get("kinds", [step["kind"]]))
+        presentation = _presentation(step["id"], language)
         result.append({
             "id": step["id"],
             "label": step["label"],
-            "label_human": STAGE_PRESENTATION.get(step["id"], {}).get("title", step["label"]),
-            "question_human": STAGE_PRESENTATION.get(step["id"], {}).get("question", step["why"]),
+            "label_human": presentation.get("title", step["label"]),
+            "question_human": presentation.get("question", step["why"]),
             "kind": step["kind"],
             "status": status,
             "approved": stage_approved,
@@ -460,42 +539,44 @@ def _stage_sequence(stage_id: str, approved: dict[str, int], pending: dict[str, 
     return result
 
 
-def _human_route(stage_id: str, approved: dict[str, int], pending: dict[str, int]) -> list[dict[str, Any]]:
+def _human_route(stage_id: str, approved: dict[str, int], pending: dict[str, int], language: str) -> list[dict[str, Any]]:
     return [
         {
             "id": step["id"],
-            "title": STAGE_PRESENTATION.get(step["id"], {}).get("title", step["label"]),
-            "question": STAGE_PRESENTATION.get(step["id"], {}).get("question", step["why"]),
+            "title": _presentation(step["id"], language).get("title", step["label"]),
+            "question": _presentation(step["id"], language).get("question", step["why"]),
             "status": item["status"],
             "accepted": item["approved"],
             "pending": item["pending"],
         }
-        for item, step in zip(_stage_sequence(stage_id, approved, pending), WORKFLOW_STEPS)
+        for item, step in zip(_stage_sequence(stage_id, approved, pending, language), WORKFLOW_STEPS)
     ]
 
 
-def _next_step(stage_id: str, pending: dict[str, int], max_notes: int, max_domains: int, limit: int, include_memory: bool) -> dict[str, Any]:
+def _next_step(stage_id: str, pending: dict[str, int], max_notes: int, max_domains: int, limit: int, include_memory: bool, language: str) -> dict[str, Any]:
     step = next((item for item in WORKFLOW_STEPS if item["id"] == stage_id), None)
     if step is None:
+        presentation = _presentation("maintenance", language)
         return {
             "id": "maintenance",
             "label": "Maintain the map",
-            "label_human": STAGE_PRESENTATION["maintenance"]["title"],
+            "label_human": presentation["title"],
             "why": "No immediate review cards are pending in the current guide window.",
             "primary_tool": "guide_next_steps",
             "approval_tool": None,
             "suggested_action": "Re-run guide_next_steps after adding or changing notes.",
             "writes": "none",
         }
+    presentation = _presentation(step["id"], language)
     return {
         "id": step["id"],
         "label": step["label"],
-        "label_human": STAGE_PRESENTATION.get(step["id"], {}).get("title", step["label"]),
+        "label_human": presentation.get("title", step["label"]),
         "kind": step["kind"],
         "why": step["why"],
-        "question_human": STAGE_PRESENTATION.get(step["id"], {}).get("question", step["why"]),
-        "plain_next": STAGE_PRESENTATION.get(step["id"], {}).get("plain_next", ""),
-        "write_preview": STAGE_PRESENTATION.get(step["id"], {}).get("writes", ""),
+        "question_human": presentation.get("question", step["why"]),
+        "plain_next": presentation.get("plain_next", ""),
+        "write_preview": presentation.get("writes", ""),
         "pending": sum(pending.get(kind, 0) for kind in step.get("kinds", [step["kind"]])),
         "primary_tool": "build_review_apply_queue",
         "primary_arguments": {
@@ -518,20 +599,16 @@ def _next_step(stage_id: str, pending: dict[str, int], max_notes: int, max_domai
     }
 
 
-def _user_view(stage_id: str, approved: dict[str, int], pending: dict[str, int], recommended_cards: list[dict[str, Any]]) -> dict[str, Any]:
-    presentation = STAGE_PRESENTATION.get(stage_id, STAGE_PRESENTATION["maintenance"])
+def _user_view(stage_id: str, approved: dict[str, int], pending: dict[str, int], recommended_cards: list[dict[str, Any]], language: str) -> dict[str, Any]:
+    presentation = _presentation(stage_id, language)
     return {
         "mode": "human_onboarding",
+        "language": language,
         "title": presentation["title"],
         "question": presentation["question"],
         "plain_next": presentation["plain_next"],
         "what_changes": presentation["writes"],
-        "how_to_answer": [
-            "принять карточку",
-            "попросить заменить название или тип материала",
-            "пропустить карточку",
-            "попросить показать доказательства",
-        ],
+        "how_to_answer": HOW_TO_ANSWER[language],
         "progress": {
             "accepted_domains": approved.get("domain", 0),
             "accepted_roles": approved.get("role", 0),
@@ -541,7 +618,7 @@ def _user_view(stage_id: str, approved: dict[str, int], pending: dict[str, int],
                 for kind in next((step.get("kinds", [step["kind"]]) for step in WORKFLOW_STEPS if step["id"] == stage_id), [])
             ),
         },
-        "route": _human_route(stage_id, approved, pending),
+        "route": _human_route(stage_id, approved, pending, language),
         "cards_preview": [
             {
                 "id": card.get("id"),
@@ -568,8 +645,10 @@ async def guide_next_steps(
     limit: int = 40,
     include_memory: bool = False,
     include_tool_guide: bool = False,
+    language: str = "auto",
 ) -> dict[str, Any]:
     """Explain the current LINZA onboarding stage and safe next actions."""
+    resolved_language = _resolve_language(core, language)
     guide_limit = max(1, int(limit))
     queue = await core.build_review_apply_queue(
         max_notes=max_notes,
@@ -587,11 +666,11 @@ async def guide_next_steps(
             {
                 "id": item["id"],
                 "label": item["label"],
-                "label_human": STAGE_PRESENTATION.get(item["id"], {}).get("title", item["label"]),
+                "label_human": _presentation(item["id"], resolved_language).get("title", item["label"]),
                 "kind": item["kind"],
                 "kinds": item.get("kinds", [item["kind"]]),
                 "why": item["why"],
-                "question_human": STAGE_PRESENTATION.get(item["id"], {}).get("question", item["why"]),
+                "question_human": _presentation(item["id"], resolved_language).get("question", item["why"]),
             }
             for item in WORKFLOW_STEPS
             if item["id"] == stage_id
@@ -599,13 +678,13 @@ async def guide_next_steps(
         {
             "id": "maintenance",
             "label": "Maintain the map",
-            "label_human": STAGE_PRESENTATION["maintenance"]["title"],
+            "label_human": _presentation("maintenance", resolved_language)["title"],
             "kind": "maintenance",
             "why": "No immediate review cards are pending in the current guide window.",
-            "question_human": STAGE_PRESENTATION["maintenance"]["question"],
+            "question_human": _presentation("maintenance", resolved_language)["question"],
         },
     )
-    next_step = _next_step(stage_id, pending, max_notes, max_domains, guide_limit, include_memory)
+    next_step = _next_step(stage_id, pending, max_notes, max_domains, guide_limit, include_memory, resolved_language)
     current_kinds = set(stage.get("kinds", [stage.get("kind")]))
     stage_queue = queue
     if stage_id != "maintenance":
@@ -637,10 +716,11 @@ async def guide_next_steps(
     return {
         "tool": "guide_next_steps",
         "read_only": True,
+        "language": resolved_language,
         "stage": stage,
         "next_step": next_step,
-        "user_view": _user_view(stage_id, approved, pending, recommended_cards),
-        "stage_sequence": _stage_sequence(stage_id, approved, pending),
+        "user_view": _user_view(stage_id, approved, pending, recommended_cards, resolved_language),
+        "stage_sequence": _stage_sequence(stage_id, approved, pending, resolved_language),
         "approved": approved,
         "pending": pending,
         "progress": {
@@ -675,7 +755,9 @@ async def guide_next_steps(
 __all__ = [
     "ADVANCED_MCP_TOOLS",
     "DEFAULT_MCP_TOOLS",
+    "HOW_TO_ANSWER",
     "STAGE_PRESENTATION",
+    "STAGE_PRESENTATION_EN",
     "TOOL_AUDIENCE",
     "TOOL_GUIDE",
     "WORKFLOW_STEPS",
