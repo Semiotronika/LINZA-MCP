@@ -35,7 +35,8 @@ cards, and treat those accepted cards as local teaching examples.
 
 After the human accepts a few seed examples, use
 `agent_workspace(action="grow", mode="assisted")` to continue building the
-knowledge base.
+knowledge base. Show `selected_rules` with the preview so the human sees which
+accepted examples or local rules caused each card to be selected.
 
 Rules:
 

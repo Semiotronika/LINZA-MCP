@@ -117,7 +117,9 @@ Depth features now live inside the workflow rather than as extra tools:
   cards so the human can teach LINZA what good domains, types, hierarchy, and
   causal links look like.
 - `agent_workspace(action="grow")` lets an agent continue building the knowledge
-  base after seed review by selecting cards supported by accepted examples.
+  base after seed review by selecting cards supported by accepted examples and
+  local learning rules. The response includes `selected_rules` so the agent can
+  explain why each card entered the preview.
 - `analysis_stage` focuses `draft_vault_map` and review queues on one stage.
 - `evidence_trace` explains why a card exists.
 - `pattern_draft` surfaces review-only insights such as repeated problems,

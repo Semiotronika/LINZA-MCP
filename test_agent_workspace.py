@@ -318,8 +318,11 @@ class AgentWorkspaceTests(OperatorTestCase):
             self.assertTrue(preview["read_only"])
             self.assertTrue(preview["dry_run"])
             self.assertTrue(preview["growth"]["selected_ids"])
+            self.assertTrue(preview["growth"]["selected_rules"])
+            self.assertIn("rules", preview["growth"]["learning"])
             self.assertIn("human_view", preview)
             self.assertIn("accepted examples", json.dumps(preview["human_view"], ensure_ascii=False).lower())
+            self.assertIn("accepted_", json.dumps(preview["human_view"]["sections"], ensure_ascii=False))
             self.assertEqual(
                 {
                     path.relative_to(vault).as_posix(): path.read_text(encoding="utf-8")

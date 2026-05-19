@@ -504,6 +504,56 @@ class ReviewQueueTests(OperatorTestCase):
             storage.close()
             tmp.cleanup()
 
+    def test_learning_examples_expose_rules_for_supervised_growth(self):
+        from linza_mcp.review_queue import (
+            learning_examples_from_storage,
+            select_learned_queue_items,
+            select_learned_queue_matches,
+        )
+
+        tmp, vault, storage, core = self.make_core()
+        try:
+            storage.record_approved_item("domain", {"domain_name": "Product"})
+            storage.record_approved_item("hierarchy_link", {
+                "parent_path": "Product/Overview.md",
+                "child_paths": ["Product/Decision.md"],
+                "domain_name": "Product",
+                "relation": "parent_of",
+            })
+            storage.record_approved_item("causal_link", {
+                "source_path": "Product/Problem.md",
+                "target_path": "Product/Decision.md",
+                "relation": "basis_for",
+            })
+            queue_items = [
+                {
+                    "id": "rq-causal-1",
+                    "kind": "causal_link",
+                    "priority": "medium",
+                    "approval": {"arguments": {"item_type": "causal_link", "relation": "basis_for"}},
+                },
+                {
+                    "id": "rq-causal-2",
+                    "kind": "causal_link",
+                    "priority": "medium",
+                    "approval": {"arguments": {"item_type": "causal_link", "relation": "contradicts"}},
+                },
+            ]
+
+            examples = learning_examples_from_storage(storage)
+            self.assertEqual(examples["rules"]["domain_names"], ["Product"])
+            self.assertEqual(examples["rules"]["hierarchy_relations"], ["parent_of"])
+            self.assertEqual(examples["rules"]["causal_relations"], ["basis_for"])
+            self.assertIn("Product", examples["rules"]["path_prefixes"])
+
+            matches = select_learned_queue_matches(queue_items, examples, mode="assisted")
+            self.assertEqual(matches["rq-causal-1"], ["accepted_causal_relation:basis_for"])
+            self.assertNotIn("rq-causal-2", matches)
+            self.assertEqual(select_learned_queue_items(queue_items, examples, mode="assisted"), ["rq-causal-1"])
+        finally:
+            storage.close()
+            tmp.cleanup()
+
     def test_apply_learned_review_queue_dry_run_selects_only_after_examples(self):
         tmp, vault, storage, core = self.make_core()
         try:

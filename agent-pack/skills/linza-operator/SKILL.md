@@ -39,8 +39,8 @@ the human to accept exact `rq-*` cards that look right.
 When the human has accepted initial seed domains/material types/hierarchy and
 wants the agent to continue building the base, use
 `agent_workspace(action="grow", mode="assisted")`. Keep the first batch dry-run,
-show the selected cards, then use `dry_run=false` only for a small approved
-batch. This is supervised growth, not blind autopilot.
+show the selected cards and `selected_rules`, then use `dry_run=false` only for
+a small approved batch. This is supervised growth, not blind autopilot.
 
 Use low-level tools only to support a clear workflow: indexing, search,
 explanation, review queue generation, and exact dry-run apply. Profiles,

@@ -174,6 +174,9 @@ from `agent_workspace` or `guide_next_steps`, not from a raw tool list.
 | `show_flow` | Find a route or flow between nodes |
 | `create_context_pack` | Export a compact context packet for an agent |
 
+`teach` selects seed cards, and `grow` returns a preview with `selected_rules`:
+why each card entered the batch.
+
 The advanced surface exists for local development and compatibility:
 
 ```powershell

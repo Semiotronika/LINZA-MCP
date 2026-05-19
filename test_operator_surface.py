@@ -334,6 +334,7 @@ class OperatorSurfaceTests(OperatorTestCase):
         self.assertIn("source_kind=\"web_article\"", combined)
         self.assertIn("Tool Catalog", combined)
         self.assertIn('agent_workspace(action="teach")', combined)
+        self.assertIn("selected_rules", combined)
         self.assertIn("Error Handling", skill)
         self.assertIn("developer/CI-facing", (root / "scripts" / "README.md").read_text(encoding="utf-8"))
         self.assertIn("from linza_mcp import (", (root / "server.py").read_text(encoding="utf-8"))

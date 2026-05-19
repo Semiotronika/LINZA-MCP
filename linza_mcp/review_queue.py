@@ -1034,13 +1034,17 @@ def learning_examples_from_storage(storage) -> Dict[str, Any]:
     domains: set[str] = set()
     hierarchy_domains: set[str] = set()
     relations: set[str] = set()
+    hierarchy_relations: set[str] = set()
+    causal_relations: set[str] = set()
     memory_types: set[str] = set()
     material_types: dict[str, str] = {}
+    path_prefixes: set[str] = set()
     approved_signatures: set[str] = set()
     for item in items:
         payload = item.get("payload", {})
         item_type = item.get("item_type")
         approved_signatures.add(queue_item_signature(str(item_type), payload))
+        path_prefixes.update(approved_path_prefixes(str(item_type), payload))
         if item_type == "role" and payload.get("role"):
             roles.add(str(payload["role"]))
         elif item_type == "domain" and payload.get("domain_name"):
@@ -1049,13 +1053,27 @@ def learning_examples_from_storage(storage) -> Dict[str, Any]:
             if payload.get("domain_name"):
                 hierarchy_domains.add(str(payload["domain_name"]))
             if payload.get("relation"):
-                relations.add(str(payload["relation"]))
+                relation = str(payload["relation"])
+                relations.add(relation)
+                hierarchy_relations.add(relation)
         elif item_type == "causal_link" and payload.get("relation"):
-            relations.add(str(payload["relation"]))
+            relation = str(payload["relation"])
+            relations.add(relation)
+            causal_relations.add(relation)
         elif item_type == "memory_item" and payload.get("memory_type"):
             memory_types.add(str(payload["memory_type"]))
         elif item_type == "material_type" and payload.get("type_id") and payload.get("type_name"):
             material_types[str(payload["type_id"])] = str(payload["type_name"])
+    rules = {
+        "role_values": sorted(roles),
+        "domain_names": sorted(domains),
+        "material_type_names": sorted(set(material_types.values())),
+        "hierarchy_domains": sorted(hierarchy_domains),
+        "hierarchy_relations": sorted(hierarchy_relations),
+        "causal_relations": sorted(causal_relations),
+        "memory_types": sorted(memory_types),
+        "path_prefixes": sorted(path_prefixes),
+    }
     return {
         "counts": dict(sorted(counts.items())),
         "roles": sorted(roles),
@@ -1064,9 +1082,34 @@ def learning_examples_from_storage(storage) -> Dict[str, Any]:
         "relations": sorted(relations),
         "memory_types": sorted(memory_types),
         "material_types": dict(sorted(material_types.items())),
+        "rules": rules,
         "approved_signatures": sorted(sig for sig in approved_signatures if sig),
         "total_examples": sum(counts.values()),
     }
+
+
+def approved_path_prefixes(item_type: str, payload: Dict[str, Any]) -> set[str]:
+    paths: list[str] = []
+    if item_type == "role" and payload.get("path"):
+        paths.append(str(payload["path"]))
+    elif item_type in {"domain", "material_type"}:
+        paths.extend(str(path) for path in payload.get("paths", []) if str(path).strip())
+    elif item_type == "hierarchy_link":
+        paths.append(str(payload.get("parent_path", "")))
+        paths.extend(str(path) for path in payload.get("child_paths", []) if str(path).strip())
+    elif item_type == "causal_link":
+        paths.extend([str(payload.get("source_path", "")), str(payload.get("target_path", ""))])
+    elif item_type == "memory_item" and payload.get("source_path"):
+        paths.append(str(payload["source_path"]))
+
+    prefixes: set[str] = set()
+    for path in paths:
+        rel = path.replace("\\", "/").strip("/")
+        if "/" in rel:
+            prefix = rel.split("/", 1)[0].strip()
+            if prefix:
+                prefixes.add(prefix)
+    return prefixes
 
 
 def queue_item_signature(item_type: str, arguments: Dict[str, Any]) -> str:
@@ -1108,13 +1151,13 @@ def queue_item_signature(item_type: str, arguments: Dict[str, Any]) -> str:
     return ""
 
 
-def _learning_match_reason(item: Dict[str, Any], examples: Dict[str, Any], mode: str) -> str | None:
+def _learning_match_reasons(item: Dict[str, Any], examples: Dict[str, Any], mode: str) -> list[str]:
     if mode == "review":
-        return None
+        return []
     arguments = item.get("approval", {}).get("arguments", {})
     item_type = arguments.get("item_type") or item.get("kind")
     if queue_item_signature(str(item_type), arguments) in set(examples.get("approved_signatures", [])):
-        return None
+        return []
     priority = str(item.get("priority", "medium"))
     roles = set(examples.get("roles", []))
     domains = set(examples.get("domains", []))
@@ -1122,32 +1165,63 @@ def _learning_match_reason(item: Dict[str, Any], examples: Dict[str, Any], mode:
     relations = set(examples.get("relations", []))
     memory_types = set(examples.get("memory_types", []))
     counts = examples.get("counts", {})
+    rules = examples.get("rules", {}) if isinstance(examples.get("rules", {}), dict) else {}
+    hierarchy_relations = set(rules.get("hierarchy_relations", []))
+    causal_relations = set(rules.get("causal_relations", []))
+    reasons: list[str] = []
 
     if item_type == "role":
         role = str(arguments.get("role", ""))
         if role in roles and priority in {"high", "medium"}:
-            return f"accepted_role_example:{role}"
+            reasons.append(f"accepted_role_example:{role}")
     if item_type == "domain":
         domain_name = str(arguments.get("domain_name", ""))
         if domain_name in domains:
-            return f"accepted_domain_example:{domain_name}"
+            reasons.append(f"accepted_domain_example:{domain_name}")
         if mode == "autopilot" and counts.get("domain", 0) >= 1 and priority == "high":
-            return "autopilot_domain_after_examples"
+            reasons.append("autopilot_domain_after_examples")
     if item_type == "hierarchy_link":
         domain_name = str(arguments.get("domain_name", ""))
+        relation = str(arguments.get("relation", "parent_of"))
+        if relation in hierarchy_relations and (not domain_name or domain_name in domains or domain_name in hierarchy_domains):
+            reasons.append(f"accepted_hierarchy_relation:{relation}")
         if counts.get("hierarchy_link", 0) >= 1 and (not domain_name or domain_name in domains or domain_name in hierarchy_domains):
-            return "accepted_hierarchy_example"
+            reasons.append("accepted_hierarchy_example")
         if mode == "autopilot" and counts.get("hierarchy_link", 0) >= 1:
-            return "autopilot_hierarchy_after_examples"
+            reasons.append("autopilot_hierarchy_after_examples")
     if item_type == "causal_link":
         relation = str(arguments.get("relation", ""))
+        if relation and relation in causal_relations:
+            reasons.append(f"accepted_causal_relation:{relation}")
         if mode == "autopilot" and counts.get("causal_link", 0) >= 1 and (not relation or relation in relations):
-            return "autopilot_causal_after_examples"
+            reasons.append("autopilot_causal_after_examples")
     if item_type == "memory_item":
         memory_type = str(arguments.get("memory_type", ""))
         if mode == "autopilot" and memory_type in memory_types:
-            return f"autopilot_memory_type_example:{memory_type}"
-    return None
+            reasons.append(f"autopilot_memory_type_example:{memory_type}")
+    return reasons
+
+
+def _learning_match_reason(item: Dict[str, Any], examples: Dict[str, Any], mode: str) -> str | None:
+    reasons = _learning_match_reasons(item, examples, mode)
+    return reasons[0] if reasons else None
+
+
+def select_learned_queue_matches(
+    items: list[Dict[str, Any]],
+    examples: Dict[str, Any],
+    mode: str = "review",
+) -> Dict[str, list[str]]:
+    normalized_mode = str(mode or "review").strip().lower()
+    if normalized_mode not in {"review", "assisted", "autopilot"}:
+        raise ValueError("mode must be review, assisted, or autopilot")
+    matches: Dict[str, list[str]] = {}
+    for item in items:
+        item_id = str(item.get("id", ""))
+        reasons = _learning_match_reasons(item, examples, normalized_mode)
+        if item_id and reasons:
+            matches[item_id] = reasons
+    return matches
 
 
 def select_learned_queue_items(
@@ -1158,12 +1232,7 @@ def select_learned_queue_items(
     normalized_mode = str(mode or "review").strip().lower()
     if normalized_mode not in {"review", "assisted", "autopilot"}:
         raise ValueError("mode must be review, assisted, or autopilot")
-    selected: list[str] = []
-    for item in items:
-        reason = _learning_match_reason(item, examples, normalized_mode)
-        if reason and item.get("id"):
-            selected.append(str(item["id"]))
-    return selected
+    return list(select_learned_queue_matches(items, examples, normalized_mode))
 
 
 async def apply_learned_review_queue(
@@ -1192,18 +1261,23 @@ async def apply_learned_review_queue(
         include_memory=include_memory,
     )
     examples = learning_examples_from_storage(core.storage)
-    selected_ids = select_learned_queue_items(queue.get("items", []), examples, normalized_mode)
+    selected_matches = select_learned_queue_matches(queue.get("items", []), examples, normalized_mode)
+    selected_ids = list(selected_matches)
     response: Dict[str, Any] = {
         "tool": "apply_learned_review_queue",
         "status": "review" if normalized_mode == "review" else ("no_learned_matches" if not selected_ids else ("preview" if dry_run else "applied")),
         "mode": normalized_mode,
         "dry_run": dry_run,
         "selected_ids": selected_ids,
+        "selected_rules": [
+            {"id": item_id, "reasons": reasons}
+            for item_id, reasons in selected_matches.items()
+        ],
         "learning": examples,
         "queue_summary": queue.get("summary", {}),
         "policy": [
             "review mode never selects or applies items automatically.",
-            "assisted mode selects only material types/domains/hierarchy links supported by accepted examples.",
+            "assisted mode selects only cards supported by accepted examples and local learning rules.",
             "autopilot can select more sidecar relations after examples, but still supports dry_run.",
             "Existing note bodies must remain unchanged; source-note content is not rewritten.",
         ],
@@ -1385,8 +1459,10 @@ __all__ = [
     "approve_memory_item",
     "approve_draft_item",
     "approve_review_queue_items",
+    "approved_path_prefixes",
     "learning_examples_from_storage",
     "queue_item_signature",
+    "select_learned_queue_matches",
     "select_learned_queue_items",
     "apply_learned_review_queue",
 ]
