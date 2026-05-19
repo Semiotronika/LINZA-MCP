@@ -400,7 +400,11 @@ class OperatorSurfaceTests(OperatorTestCase):
         for env_var in {"LINZA_EMBED_KEY", "LINZA_BRIDGE_THRESHOLD", "LINZA_DEFAULT_PROFILE"}:
             self.assertIn(env_var, (root / "README.md").read_text(encoding="utf-8"))
             self.assertIn(env_var, (root / "README_EN.md").read_text(encoding="utf-8"))
-        import tomllib
+        try:
+            import tomllib
+        except ModuleNotFoundError:  # Python 3.10
+            import tomli as tomllib
+
         pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
         self.assertEqual(pyproject["project"]["name"], "linza-mcp")
         self.assertEqual(pyproject["project"]["version"], __version__)

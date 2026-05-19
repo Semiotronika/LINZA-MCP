@@ -50,6 +50,7 @@ pdf = [
 dev = [
   "build >= 1.0",
   "ruff >= 0.8",
+  "tomli >= 2.0; python_version < '3.11'",
   "twine >= 5.0",
 ]
 
