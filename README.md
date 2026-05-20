@@ -329,8 +329,9 @@ python -m unittest test_agent_workspace.AgentWorkspaceTests.test_examples_sample
 
 - 🌐 [semiotronika.ru](https://semiotronika.ru)
 - 📦 [PyPI](https://pypi.org/project/linza-mcp/)
-- 🗂️ [Official MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers?search=LINZA&limit=10)
 - 🐙 [GitHub](https://github.com/Semiotronika/LINZA-MCP)
+
+MCP Registry ID: `io.github.Semiotronika/LINZA-MCP`
 
 MIT License © 2026 Semiotronika
 

@@ -338,6 +338,16 @@ python -m unittest test_agent_workspace.AgentWorkspaceTests.test_examples_sample
 
 ---
 
+## Links
+
+- [semiotronika.ru](https://semiotronika.ru)
+- [PyPI](https://pypi.org/project/linza-mcp/)
+- [GitHub](https://github.com/Semiotronika/LINZA-MCP)
+
+MCP Registry ID: `io.github.Semiotronika/LINZA-MCP`
+
+---
+
 <sub>Cosines do not converge because everything is the same. They converge when meaning finds its angle.</sub>
 
 <!-- mcp-name: io.github.Semiotronika/LINZA-MCP -->
