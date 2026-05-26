@@ -55,9 +55,34 @@ def _kind_matches(item_kind: str, requested: str) -> bool:
     return item_kind == aliases.get(normalized, normalized)
 
 
+def _display_lines(item_id: str, title: str, evidence: str, effect: str) -> dict[str, Any]:
+    lines = [
+        f"Пункт ревью: {item_id}",
+        f"Предложение: {preview_text(title, 140)}",
+        f"Основание: {preview_text(evidence, 220)}",
+        f"Что изменится: {effect}",
+    ]
+    return {
+        "lines": lines,
+        "text": "\n".join(lines),
+    }
+
+
+def _human_message(items: list[dict[str, Any]], limit: int = 5) -> str:
+    texts = [
+        str((item.get("display") or {}).get("text") or "").strip()
+        for item in items[: max(1, int(limit))]
+    ]
+    texts = [text for text in texts if text]
+    if not texts:
+        return "LINZA не нашла пунктов для ревью."
+    return "\n\n".join(texts)
+
+
 def _review_item(kind: str, payload: dict[str, Any], priority: str, title: str, summary: str, evidence: str) -> dict[str, Any]:
     stable_id = review_id(kind, payload)
     payload = {**payload, "review_id": stable_id}
+    effect = "LINZA сохранит подтверждение в `.linza`; исходные материалы и заметки не меняются."
     return {
         "id": stable_id,
         "kind": kind,
@@ -75,9 +100,11 @@ def _review_item(kind: str, payload: dict[str, Any], priority: str, title: str, 
             },
         },
         "human": {
-            "question": "Accept this sidecar review item?",
-            "effect": "Records a reviewed sidecar item; raw artifacts and source notes stay unchanged.",
+            "question": "Принять этот пункт в локальную память LINZA?",
+            "effect": effect,
+            "write_preview": effect,
         },
+        "display": _display_lines(stable_id, title, evidence, effect),
     }
 
 
@@ -196,6 +223,7 @@ def review_next(
         "read_only": True,
         "requires_review": True,
         "items": items,
+        "human_message": _human_message(items),
         "summary": {
             "items": len(items),
             "kind": kind or "all",

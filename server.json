@@ -2,17 +2,17 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.Semiotronika/LINZA-MCP",
   "title": "LINZA",
-  "description": "Local-first MCP sidecar for Markdown artifacts, review cards, and supervised knowledge growth.",
+  "description": "Local-first MCP sidecar for Markdown artifacts, review items, and supervised knowledge growth.",
   "repository": {
     "url": "https://github.com/Semiotronika/LINZA-MCP",
     "source": "github"
   },
-  "version": "0.1.4",
+  "version": "0.1.5",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "linza-mcp",
-      "version": "0.1.4",
+      "version": "0.1.5",
       "transport": {
         "type": "stdio"
       },

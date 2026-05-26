@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 .ruff_cache/
 .test-tmp/
+.build-tmp/
 .linza/
 .internal-scripts/
 .env

@@ -1,4 +1,4 @@
-from test_support import *
+from tests.test_support import *
 
 
 class ReviewQueueTests(OperatorTestCase):
@@ -316,6 +316,16 @@ class ReviewQueueTests(OperatorTestCase):
             self.assertTrue(all(item["approval"]["tool"] == "approve_draft_item" for item in result["items"]))
             self.assertTrue(all(item["approval"]["arguments"]["dry_run"] is True for item in result["items"]))
             self.assertTrue(all(item.get("human", {}).get("question") for item in result["items"]))
+            self.assertIn("human_message", result)
+            self.assertTrue(all(item.get("display", {}).get("lines") for item in result["items"]))
+            self.assertTrue(any(
+                line.startswith("Предложение:")
+                for line in result["items"][0]["display"]["lines"]
+            ))
+            self.assertTrue(any(
+                line.startswith("Что изменится:")
+                for line in result["items"][0]["display"]["lines"]
+            ))
             item_types = {item["approval"]["arguments"]["item_type"] for item in result["items"]}
             self.assertIn("material_type", item_types)
             self.assertIn("domain", item_types)
@@ -381,6 +391,8 @@ class ReviewQueueTests(OperatorTestCase):
             self.assertLessEqual(len(guide["recommended_cards"]), 5)
             for card in guide["recommended_cards"]:
                 self.assertIn(card["kind"], set(guide["stage"].get("kinds", [guide["stage"]["kind"]])))
+                self.assertTrue(card.get("display", {}).get("lines"))
+                self.assertTrue(card.get("display", {}).get("text"))
         finally:
             storage.close()
             tmp.cleanup()

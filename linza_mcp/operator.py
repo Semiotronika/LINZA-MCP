@@ -52,7 +52,7 @@ STAGE_PRESENTATION = {
     "review_roles": {
         "title": "Разобрать типы материалов",
         "question": "Какие типы материалов реально есть в этой базе, и как их назвать?",
-        "plain_next": "LINZA сначала покажет группы найденных материалов и попросит назвать тип. После этого появятся отдельные карточки на запись `role` в YAML.",
+        "plain_next": "LINZA сначала покажет группы найденных материалов и попросит назвать тип. После этого появятся отдельные предложения на запись `role` в YAML.",
         "writes": "Название типа сначала сохраняется в `.linza`; YAML `role: ...` появляется только отдельным подтвержденным шагом. Текст заметки не меняется.",
     },
     "review_hierarchy": {
@@ -92,8 +92,8 @@ STAGE_PRESENTATION_EN = {
     "review_roles": {
         "title": "Review material types",
         "question": "What kinds of material are actually present here, and how should they be named?",
-        "plain_next": "LINZA first shows discovered material groups and asks for a human name. Only after that does it create separate review cards for writing `role` into YAML.",
-        "writes": "The material-type name is stored in `.linza` first. Visible YAML `role: ...` appears only through a separate approved card. Note bodies are not changed.",
+        "plain_next": "LINZA first shows discovered material groups and asks for a human name. Only after that does it create separate review items for writing `role` into YAML.",
+        "writes": "The material-type name is stored in `.linza` first. Visible YAML `role: ...` appears only through a separate approved item. Note bodies are not changed.",
     },
     "review_hierarchy": {
         "title": "Build a soft hierarchy",
@@ -124,15 +124,15 @@ STAGE_PRESENTATION_EN = {
 
 HOW_TO_ANSWER = {
     "ru": [
-        "принять карточку",
+        "принять пункт",
         "попросить заменить название или тип материала",
-        "пропустить карточку",
+        "пропустить пункт",
         "попросить показать доказательства",
     ],
     "en": [
-        "accept the card",
+        "accept the item",
         "ask to rename the area or material type",
-        "skip the card",
+        "skip the item",
         "ask to show the evidence",
     ],
 }
@@ -252,7 +252,7 @@ TOOL_GUIDE = {
     },
     "guide_next_steps": {
         "when": "After first scan, after domains, and whenever the user asks what to do next.",
-        "does": "Explains current onboarding stage, pending cards, safe next tools, and tool purposes.",
+        "does": "Explains current onboarding stage, pending review items, safe next tools, and tool purposes.",
         "default_mode": "read_only",
         "write_scope": "none",
     },
@@ -287,20 +287,20 @@ TOOL_GUIDE = {
         "write_scope": "frontmatter YAML only; never note body",
     },
     "approve_draft_item": {
-        "when": "When applying exactly one reviewed material-type, domain, hierarchy, causal, or memory card.",
+        "when": "When applying exactly one reviewed material-type, domain, hierarchy, causal, or memory item.",
         "does": "Applies one draft item or records it in sidecar.",
         "default_mode": "dry_run",
         "write_scope": "material types/domains write compact YAML; hierarchy/causal/memory write sidecar",
     },
     "approve_review_queue_items": {
-        "when": "When applying a small set of reviewed stable rq-* card IDs.",
-        "does": "Rebuilds the queue, matches exact IDs, previews by default, and applies only matched cards.",
+        "when": "When applying a small set of reviewed stable rq-* IDs.",
+        "does": "Rebuilds the queue, matches exact IDs, previews by default, and applies only matched items.",
         "default_mode": "dry_run",
-        "write_scope": "material-type/domain YAML or sidecar approvals depending on card kind",
+        "write_scope": "material-type/domain YAML or sidecar approvals depending on review kind",
     },
     "apply_learned_review_queue": {
         "when": "After accepted examples exist and the user wants assisted/autopilot suggestions.",
-        "does": "Selects cards supported by accepted examples; preview by default.",
+        "does": "Selects review items supported by accepted examples; preview by default.",
         "default_mode": "dry_run",
         "write_scope": "same as approve_review_queue_items only when dry_run=false",
     },
@@ -336,7 +336,7 @@ TOOL_GUIDE = {
     },
     "build_review_apply_queue": {
         "when": "Main review tool after draft_vault_map; use by kind: domains, then material types, hierarchy, causal, memory.",
-        "does": "Builds stable rq-* cards with dry-run approval payloads.",
+        "does": "Builds stable rq-* review items with dry-run approval payloads.",
         "default_mode": "read_only unless write=true",
         "write_scope": ".linza/reports by default when write=true; source notes unchanged",
     },
@@ -441,14 +441,6 @@ DEFAULT_MCP_TOOLS = (
     "read_file",
     "get_stats",
     "scan_vault",
-    "build_review_apply_queue",
-    "approve_review_queue_items",
-    "list_approved_items",
-    "explain_node",
-    "explain_relationship",
-    "who_depends",
-    "show_flow",
-    "create_context_pack",
 )
 
 
@@ -561,7 +553,7 @@ def _next_step(stage_id: str, pending: dict[str, int], max_notes: int, max_domai
             "id": "maintenance",
             "label": "Maintain the map",
             "label_human": presentation["title"],
-            "why": "No immediate review cards are pending in the current guide window.",
+            "why": "No immediate review items are pending in the current guide window.",
             "primary_tool": "guide_next_steps",
             "approval_tool": None,
             "suggested_action": "Re-run guide_next_steps after adding or changing notes.",
@@ -594,7 +586,7 @@ def _next_step(stage_id: str, pending: dict[str, int], max_notes: int, max_domai
             "allow_overwrite": False,
             "include_memory": include_memory,
         },
-        "suggested_action": f"Show up to 5 {step['kind']} cards, ask the user to accept/skip/change, then dry-run exact IDs before applying.",
+        "suggested_action": f"Show up to 5 {step['kind']} review items, ask the user to accept/skip/change, then dry-run exact IDs before applying.",
         "writes": TOOL_GUIDE["approve_review_queue_items"]["write_scope"],
     }
 
@@ -680,7 +672,7 @@ async def guide_next_steps(
             "label": "Maintain the map",
             "label_human": _presentation("maintenance", resolved_language)["title"],
             "kind": "maintenance",
-            "why": "No immediate review cards are pending in the current guide window.",
+            "why": "No immediate review items are pending in the current guide window.",
             "question_human": _presentation("maintenance", resolved_language)["question"],
         },
     )
@@ -745,7 +737,7 @@ async def guide_next_steps(
         "policies": [
             "This guide is read-only.",
             "Review order is domains -> material types -> hierarchy -> causal links -> memory.",
-            "Material-type/domain cards may write compact YAML only after approval; hierarchy, causal, and memory approvals live in .linza sidecar.",
+            "Material-type/domain items may write compact YAML only after approval; hierarchy, causal, and memory approvals live in .linza sidecar.",
             "Causal links are never silently created during normal indexing.",
             "Visible Markdown reports are opt-in; default report writes go to .linza.",
         ],

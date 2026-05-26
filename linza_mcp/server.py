@@ -250,6 +250,8 @@ class LinzaMCPServer:
                             "analyze_inbox",
                             "review_next",
                             "apply_review_items",
+                            "revoke_approval",
+                            "history",
                             "teach",
                             "grow",
                             "connect",
@@ -271,6 +273,9 @@ class LinzaMCPServer:
                     "kind": {"type": "string", "default": "all"},
                     "mode": {"type": "string", "default": "assisted"},
                     "item_ids": {"type": "array", "items": {"type": "string"}},
+                    "approval_id": {"type": "integer"},
+                    "reason": {"type": "string"},
+                    "include_revoked": {"type": "boolean", "default": True},
                     "dry_run": {"type": "boolean", "default": True},
                     "allow_overwrite": {"type": "boolean", "default": False},
                     "include_memory": {"type": "boolean", "default": False},
@@ -285,6 +290,7 @@ class LinzaMCPServer:
                 _tool("list_approved_items", "List reviewed sidecar approvals.", {
                     "item_type": {"type": "string"},
                     "limit": {"type": "integer", "default": 100},
+                    "include_revoked": {"type": "boolean", "default": False},
                 }),
                 _tool("build_bases_plan", "Build an Obsidian Bases plan report.", _report_schema(REPORT_DEFAULTS["bases_plan"])),
                 _tool("build_yaml_suggestions", "Build a LINZA YAML suggestions report.", _report_schema(REPORT_DEFAULTS["yaml_suggestions"], {"limit": {"type": "integer", "default": 50}})),
@@ -569,6 +575,9 @@ class LinzaMCPServer:
                 kind=arguments.get("kind", "all"),
                 mode=arguments.get("mode", "assisted"),
                 item_ids=arguments.get("item_ids", []),
+                approval_id=arguments.get("approval_id"),
+                reason=arguments.get("reason", ""),
+                include_revoked=bool(arguments.get("include_revoked", True)),
                 dry_run=bool(arguments.get("dry_run", True)),
                 allow_overwrite=bool(arguments.get("allow_overwrite", False)),
                 include_memory=bool(arguments.get("include_memory", False)),
@@ -586,6 +595,7 @@ class LinzaMCPServer:
             return _json_result(self.storage.list_approved_items(
                 arguments.get("item_type"),
                 limit=int(arguments.get("limit", 100)),
+                include_revoked=bool(arguments.get("include_revoked", False)),
             ))
         if name == "build_bases_plan":
             return self._report_result(arguments, self.core.build_bases_plan_markdown(), REPORT_DEFAULTS["bases_plan"])

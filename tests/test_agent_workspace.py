@@ -1,4 +1,4 @@
-from test_support import *
+from tests.test_support import *
 
 
 class AgentWorkspaceTests(OperatorTestCase):
@@ -139,8 +139,10 @@ class AgentWorkspaceTests(OperatorTestCase):
             ))
             self.assertEqual(review["action"], "review_next")
             self.assertTrue(review["items"])
+            self.assertIn("human_message", review)
             self.assertTrue(all(item["id"].startswith("aw-") for item in review["items"]))
             self.assertTrue(all(item["approval"]["arguments"]["dry_run"] for item in review["items"]))
+            self.assertTrue(all(item.get("display", {}).get("lines") for item in review["items"]))
             selected_id = review["items"][0]["id"]
 
             preview = asyncio.run(core.agent_workspace(
@@ -177,6 +179,97 @@ class AgentWorkspaceTests(OperatorTestCase):
             ))
             self.assertEqual(context["action"], "export_context")
             self.assertIn("# LINZA Agent Workspace Context", context["markdown"])
+        finally:
+            storage.close()
+            tmp.cleanup()
+
+    def test_agent_workspace_can_soft_revoke_approval_and_show_history(self):
+        tmp, vault, storage, core = self.make_core()
+        try:
+            source = (
+                "# Session Log\n\n"
+                "Decision: keep revocable local approvals for agent memory.\n"
+                "Action: record a durable memory only after review.\n"
+                "Result: revoked memories should stop guiding later suggestions.\n"
+            )
+            ingest = asyncio.run(core.agent_workspace(
+                action="ingest_artifacts",
+                artifacts=[{
+                    "source_kind": "agent_log",
+                    "title": "Revocation Log",
+                    "content": source,
+                }],
+            ))
+            artifact_id = ingest["artifacts"][0]["id"]
+
+            review = asyncio.run(core.agent_workspace(
+                action="review_next",
+                kind="memory_candidate",
+                limit=5,
+            ))
+            selected_id = review["items"][0]["id"]
+
+            applied = asyncio.run(core.agent_workspace(
+                action="apply_review_items",
+                item_ids=[selected_id],
+                dry_run=False,
+            ))
+            approval_id = applied["results"][0]["approved_item_id"]
+            self.assertEqual(len(storage.list_approved_items("agent_memory")), 1)
+
+            hidden_after_apply = asyncio.run(core.agent_workspace(
+                action="review_next",
+                kind="memory_candidate",
+                limit=5,
+            ))
+            self.assertNotIn(selected_id, [item["id"] for item in hidden_after_apply["items"]])
+
+            history_before = asyncio.run(core.agent_workspace(action="history", limit=10))
+            self.assertEqual(history_before["action"], "history")
+            self.assertTrue(history_before["read_only"])
+            self.assertTrue(any(
+                entry.get("approval_id") == approval_id
+                for entry in history_before["entries"]
+            ))
+
+            preview = asyncio.run(core.agent_workspace(
+                action="revoke_approval",
+                approval_id=approval_id,
+                reason="wrong scope",
+            ))
+            self.assertEqual(preview["status"], "preview")
+            self.assertEqual(len(storage.list_approved_items("agent_memory")), 1)
+
+            revoked = asyncio.run(core.agent_workspace(
+                action="revoke_approval",
+                approval_id=approval_id,
+                reason="wrong scope",
+                dry_run=False,
+            ))
+            self.assertEqual(revoked["status"], "revoked")
+            self.assertFalse(revoked["read_only"])
+            self.assertEqual(storage.list_approved_items("agent_memory"), [])
+            all_items = storage.list_approved_items("agent_memory", include_revoked=True)
+            self.assertEqual(len(all_items), 1)
+            self.assertEqual(all_items[0]["status"], "revoked")
+            self.assertEqual(all_items[0]["payload"]["artifact_id"], artifact_id)
+
+            events = storage.list_audit_events("approval_revoked", limit=10)
+            self.assertEqual(events[0]["payload"]["approval_id"], approval_id)
+            self.assertEqual(events[0]["payload"]["reason"], "wrong scope")
+
+            history_after = asyncio.run(core.agent_workspace(action="history", limit=10))
+            event_types = [entry.get("event_type") for entry in history_after["entries"]]
+            self.assertIn("approval_revoked", event_types)
+            self.assertIn("human_message", history_after)
+            self.assertIn(str(approval_id), history_after["human_message"])
+
+            visible_again = asyncio.run(core.agent_workspace(
+                action="review_next",
+                kind="memory_candidate",
+                limit=5,
+            ))
+            self.assertIn(selected_id, [item["id"] for item in visible_again["items"]])
         finally:
             storage.close()
             tmp.cleanup()
@@ -363,7 +456,7 @@ class AgentWorkspaceTests(OperatorTestCase):
             self.assertTrue(preview["growth"]["selected_rules"])
             self.assertIn("rules", preview["growth"]["learning"])
             self.assertIn("human_view", preview)
-            self.assertIn("accepted examples", json.dumps(preview["human_view"], ensure_ascii=False).lower())
+            self.assertIn("принятые примеры", json.dumps(preview["human_view"], ensure_ascii=False).lower())
             self.assertIn("accepted_", json.dumps(preview["human_view"]["sections"], ensure_ascii=False))
             self.assertEqual(
                 {
@@ -447,8 +540,8 @@ class AgentWorkspaceTests(OperatorTestCase):
             self.assertTrue(all(card["approval"]["arguments"]["dry_run"] for card in cards))
             self.assertTrue(all(card["evidence"] for card in cards))
             self.assertTrue(all(card["teaches"] for card in cards))
-            self.assertIn("teach", result["human_view"]["title"].lower())
-            self.assertIn("grow", " ".join(result["human_view"]["next_steps"]).lower())
+            self.assertIn("обуч", result["human_view"]["title"].lower())
+            self.assertIn("рост", " ".join(result["human_view"]["next_steps"]).lower())
             self.assertIn("teach is read-only", result["policy"])
             self.assertEqual(
                 {
@@ -522,7 +615,7 @@ class AgentWorkspaceTests(OperatorTestCase):
             tmp.cleanup()
 
     def test_examples_sample_pack_runs_end_to_end(self):
-        examples_root = Path(__file__).parent / "examples"
+        examples_root = Path(__file__).resolve().parents[1] / "examples"
         tmp = tempfile.TemporaryDirectory()
         vault = Path(tmp.name) / "sample-vault"
         storage = None

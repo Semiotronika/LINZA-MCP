@@ -543,22 +543,32 @@ class Storage:
     def add_approved_item(self, item_type: str, payload: Dict[str, Any]) -> int:
         return self.record_approved_item(item_type, payload, status="approved")
 
-    def list_approved_items(self, item_type: Optional[str] = None, limit: int = 100) -> list[Dict[str, Any]]:
+    def list_approved_items(
+        self,
+        item_type: Optional[str] = None,
+        limit: int = 100,
+        include_revoked: bool = False,
+    ) -> list[Dict[str, Any]]:
+        clauses: list[str] = []
+        params: list[Any] = []
         if item_type:
-            cur = self.conn.execute("""
-                SELECT id, item_type, payload, status, created_at
-                FROM approved_items
-                WHERE item_type = ?
-                ORDER BY id DESC
-                LIMIT ?
-            """, (item_type, limit))
-        else:
-            cur = self.conn.execute("""
-                SELECT id, item_type, payload, status, created_at
-                FROM approved_items
-                ORDER BY id DESC
-                LIMIT ?
-            """, (limit,))
+            clauses.append("item_type = ?")
+            params.append(item_type)
+        if not include_revoked:
+            clauses.append("status != ?")
+            params.append("revoked")
+        query = """
+            SELECT id, item_type, payload, status, created_at
+            FROM approved_items
+        """
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += """
+            ORDER BY id DESC
+            LIMIT ?
+        """
+        params.append(max(1, int(limit)))
+        cur = self.conn.execute(query, tuple(params))
         return [
             {
                 "id": row["id"],
@@ -570,8 +580,14 @@ class Storage:
             for row in cur
         ]
 
-    def get_approved_item_count(self) -> int:
-        cur = self.conn.execute("SELECT COUNT(*) as c FROM approved_items")
+    def get_approved_item_count(self, include_revoked: bool = False) -> int:
+        if include_revoked:
+            cur = self.conn.execute("SELECT COUNT(*) as c FROM approved_items")
+        else:
+            cur = self.conn.execute(
+                "SELECT COUNT(*) as c FROM approved_items WHERE status != ?",
+                ("revoked",),
+            )
         return int(cur.fetchone()["c"])
 
     def get_approved_item_by_id(self, item_id: int) -> Optional[Dict[str, Any]]:
@@ -589,6 +605,19 @@ class Storage:
             "status": row["status"],
             "created_at": row["created_at"],
         }
+
+    def revoke_approved_item(self, item_id: int) -> Optional[Dict[str, Any]]:
+        existing = self.get_approved_item_by_id(int(item_id))
+        if not existing:
+            return None
+        if existing.get("status") == "revoked":
+            return existing
+        self.conn.execute(
+            "UPDATE approved_items SET status = ? WHERE id = ?",
+            ("revoked", int(item_id)),
+        )
+        self.conn.commit()
+        return self.get_approved_item_by_id(int(item_id))
 
     # --- Agent workspace artifacts ---
 

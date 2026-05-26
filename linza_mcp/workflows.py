@@ -21,6 +21,8 @@ SUPPORTED_AGENT_WORKSPACE_ACTIONS = [
     "analyze_inbox",
     "review_next",
     "apply_review_items",
+    "revoke_approval",
+    "history",
     "teach",
     "grow",
     "connect",
@@ -49,6 +51,14 @@ def _safe_positive_int(value: Any, default: int, upper: int) -> int:
     except Exception:
         parsed = default
     return max(1, min(upper, parsed))
+
+
+def _safe_optional_int(value: Any) -> int | None:
+    try:
+        parsed = int(value)
+    except Exception:
+        return None
+    return parsed if parsed > 0 else None
 
 
 def _teach_item_score(item: dict[str, Any]) -> tuple[int, int, int, int]:
@@ -87,7 +97,7 @@ def _teach_item_lessons(item: dict[str, Any]) -> list[str]:
             "what should become durable agent memory",
             f"memory type: {arguments.get('memory_type', '')}",
         ]
-    return ["how to judge a review card"]
+    return ["how to judge a review item"]
 
 
 def _teach_card(item: dict[str, Any]) -> dict[str, Any]:
@@ -107,6 +117,7 @@ def _teach_card(item: dict[str, Any]) -> dict[str, Any]:
         "why": item.get("why", ""),
         "paths": item.get("paths", [])[:8],
         "evidence": evidence,
+        "display": item.get("display", {}),
         "teaches": [lesson for lesson in _teach_item_lessons(item) if str(lesson).strip()],
         "approval": item.get("approval", {}),
     }
@@ -116,46 +127,46 @@ def _teach_human_view(cards: list[dict[str, Any]], learning: dict[str, Any]) -> 
     total_examples = int(learning.get("total_examples", 0) or 0)
     if cards:
         summary = (
-            "Review a few high-signal seed cards. Accepted cards become local examples "
-            "for later supervised growth."
+            "Проверьте несколько сильных пунктов. Принятые пункты станут локальными примерами "
+            "для дальнейшей работы."
         )
     else:
-        summary = "LINZA did not find teachable cards yet. Index or import more material first."
+        summary = "LINZA пока не нашла пунктов для обучения. Сначала проиндексируйте папку или добавьте материал."
     return {
-        "title": "Teach LINZA on seed examples",
+        "title": "Обучить LINZA на примерах",
         "summary": summary,
         "sections": [
             {
-                "title": "Seed cards",
-                "summary": f"{len(cards)} read-only cards selected for teaching.",
+                "title": "Пункты для примера",
+                "summary": f"Выбрано пунктов: {len(cards)}. Это только просмотр, без записи.",
                 "items": [
                     f"{card['id']} | {card['kind']} | {card['title']}"
                     for card in cards
                 ],
             },
             {
-                "title": "Current learning",
-                "summary": f"{total_examples} accepted examples are already stored locally.",
+                "title": "Что уже принято",
+                "summary": f"Локально сохранено принятых примеров: {total_examples}.",
                 "items": [
                     f"{key}: {value}"
                     for key, value in sorted((learning.get("counts", {}) or {}).items())
                 ],
             },
             {
-                "title": "Safety",
-                "summary": "Teach mode only selects cards; it does not apply or write.",
+                "title": "Безопасность",
+                "summary": "Этот режим только выбирает пункты ревью; он ничего не применяет и не записывает.",
                 "items": [
-                    "teach is read-only",
-                    "approval payloads stay dry-run",
-                    "accept exact rq-* IDs before grow",
-                    "source note bodies are never rewritten",
+                    "только чтение",
+                    "пакеты применения остаются пробными",
+                    "перед ростом нужны точные принятые номера rq-*",
+                    "тела исходных заметок не переписываются",
                 ],
             },
         ],
         "next_steps": [
-            "Accept three to five exact rq-* cards that look right.",
-            "Run agent_workspace(action=\"grow\", mode=\"assisted\", dry_run=true).",
-            "Apply only a small reviewed batch after reading the grow preview.",
+            "Примите три-пять точных пунктов rq-*, которые выглядят верно.",
+            "Затем попросите LINZA показать следующий пробный рост.",
+            "Применяйте только маленькую партию после просмотра.",
         ],
     }
 
@@ -383,7 +394,7 @@ def doctor(core) -> dict[str, Any]:
     next_steps = [
         "Load documents, chats, articles, notes, or pasted logs as incoming material.",
         "Ask for a short inbox analysis before accepting anything.",
-        "Review the proposed cards; apply only exact accepted items.",
+        "Review the proposed items; apply only exact accepted IDs.",
         "Use context export when an agent needs a compact work packet.",
     ]
     if counts["artifacts"] == 0:
@@ -663,7 +674,7 @@ def _human_map_sections(workspace_map: dict[str, Any]) -> list[dict[str, Any]]:
             "summary": (
                 f"{memory.get('candidates', 0)} memory candidates, "
                 f"{memory.get('approved', 0)} approved memories, "
-                f"{len(patterns)} pattern cards."
+                f"{len(patterns)} pattern signals."
             ),
             "items": [item.get("title", "") for item in patterns[:5] if item.get("title")],
         },
@@ -742,7 +753,7 @@ async def workspace_map(
     next_steps = [
         "Open one key node before making decisions.",
         "Ask what connects two important nodes when the route is unclear.",
-        "Review the smallest useful batch of cards before accepting metadata or memory.",
+        "Review the smallest useful batch before accepting metadata or memory.",
         "Export a compact context pack when another agent needs to work on this.",
     ]
     if not has_material:
@@ -775,7 +786,7 @@ async def workspace_map(
                 },
                 {
                     "action": "review_next",
-                    "when": "The map shows useful pending review cards.",
+                    "when": "The map shows useful pending review items.",
                     "arguments": {"kind": "all", "limit": min(10, safe_limit)},
                 },
                 {
@@ -804,57 +815,57 @@ def _growth_human_view(growth: dict[str, Any]) -> dict[str, Any]:
     total_examples = int(learning.get("total_examples", 0) or 0)
     status = str(growth.get("status", "unknown"))
     if total_examples <= 0:
-        title = "Seed review needed"
-        summary = "LINZA needs a few accepted examples before it can grow the knowledge base by pattern."
+        title = "Нужны первые примеры"
+        summary = "LINZA нужны несколько принятых пунктов, прежде чем она сможет продолжать по похожим примерам."
     elif status == "preview":
-        title = "Supervised growth preview"
-        summary = f"LINZA found {len(selected_ids)} review cards that match accepted examples."
+        title = "Предпросмотр роста"
+        summary = f"LINZA нашла предложения, похожие на уже принятые примеры: {len(selected_ids)}."
     elif status == "applied":
-        title = "Supervised growth applied"
-        summary = f"LINZA applied {len(selected_ids)} learned review cards and preserved source note bodies."
+        title = "Рост применен"
+        summary = f"LINZA применила предложения по принятым примерам: {len(selected_ids)}. Тела заметок сохранены."
     else:
-        title = "Supervised growth"
-        summary = "LINZA checked accepted examples and did not find a safe growth batch."
+        title = "Рост по примерам"
+        summary = "LINZA проверила принятые примеры и не нашла безопасной партии для применения."
     return {
         "title": title,
         "summary": summary,
         "sections": [
             {
-                "title": "Accepted examples",
-                "summary": f"{total_examples} accepted examples are available as local seed decisions.",
+                "title": "Принятые примеры",
+                "summary": f"Локально доступно принятых примеров: {total_examples}.",
                 "items": [f"{key}: {value}" for key, value in sorted(counts.items())],
             },
             {
-                "title": "Selected cards",
-                "summary": f"{len(selected_ids)} cards selected by accepted examples.",
+                "title": "Выбранные предложения",
+                "summary": f"Предложений выбрано по принятым примерам: {len(selected_ids)}.",
                 "items": [
                     f"{item.get('id', '')}: {', '.join(item.get('reasons', [])[:3])}"
                     for item in selected_rules[:10]
                 ] or selected_ids[:10],
             },
             {
-                "title": "Skipped cards",
-                "summary": f"{len(skipped_rules)} learned candidates were held back by safety or quality gates.",
+                "title": "Пропущенные предложения",
+                "summary": f"Предложений удержано проверками качества или безопасности: {len(skipped_rules)}.",
                 "items": [
                     f"{item.get('id', '')}: {', '.join(item.get('reasons', [])[:3])}"
                     for item in skipped_rules[:10]
                 ],
             },
             {
-                "title": "Safety",
-                "summary": "Growth uses review-card IDs and keeps source note bodies unchanged.",
+                "title": "Безопасность",
+                "summary": "Рост идет по точным номерам предложений и не переписывает тела исходных заметок.",
                 "items": [
-                    "dry-run by default",
-                    "accepted examples required",
-                    "visible writes are limited to compact reviewed YAML",
-                    "hierarchy, causal links, and memory stay in the sidecar",
+                    "по умолчанию это пробный прогон",
+                    "нужны принятые примеры",
+                    "видимые записи ограничены короткой проверенной YAML-разметкой",
+                    "иерархия, причинные связи и память остаются в sidecar",
                 ],
             },
         ],
         "next_steps": [
-            "Review the preview before turning dry_run off.",
-            "Use a small limit for the first real growth batch.",
-            "Run map or guide again after growth so the next batch uses fresh context.",
+            "Сначала прочитайте предпросмотр.",
+            "Для первой реальной партии используйте маленький лимит.",
+            "После применения снова попросите карту или следующий шаг.",
         ],
     }
 
@@ -941,7 +952,7 @@ async def teach_workspace(
             "cards": cards,
             "candidate_count": len(candidates),
             "selection_policy": [
-                "prefer high-priority cards",
+                "prefer high-priority review items",
                 "cover domains, material types, hierarchy, causal links, and optional memory",
                 "return dry-run approval payloads only",
             ],
@@ -950,7 +961,7 @@ async def teach_workspace(
         "queue_summary": queue.get("summary", {}),
         "policy": [
             "teach is read-only",
-            "teach does not approve or apply cards",
+            "teach does not approve or apply review items",
             "approval payloads keep dry_run=true",
             "accepted examples are required before grow can apply learned batches",
             "source note bodies are not rewritten",
@@ -1023,7 +1034,7 @@ async def connect_nodes(
             "evidence": evidence,
             "next_actions": [
                 "Use read_file on the key route nodes before writing or deciding.",
-                "Treat INFERRED edges as candidates until a review card accepts them.",
+                "Treat INFERRED edges as candidates until a review item accepts them.",
             ],
         },
         "summary": {
@@ -1041,6 +1052,212 @@ async def connect_nodes(
     }
 
 
+def _approval_history_summary(item: dict[str, Any]) -> str:
+    payload = item.get("payload", {}) if isinstance(item.get("payload"), dict) else {}
+    item_type = str(item.get("item_type", "approval"))
+    status = str(item.get("status", ""))
+    label = (
+        payload.get("summary")
+        or payload.get("domain_name")
+        or payload.get("type_name")
+        or payload.get("role")
+        or payload.get("relation")
+        or payload.get("review_id")
+        or payload.get("source_path")
+        or payload.get("artifact_id")
+        or ""
+    )
+    suffix = f": {preview_text(label, 180)}" if label else ""
+    return f"Одобрение #{item.get('id')}: {item_type} ({status}){suffix}"
+
+
+def _audit_history_summary(event: dict[str, Any]) -> str:
+    payload = event.get("payload", {}) if isinstance(event.get("payload"), dict) else {}
+    event_type = str(event.get("event_type", "event"))
+    if event_type == "approval_revoked":
+        reason = str(payload.get("reason", "")).strip()
+        reason_text = f"; причина: {preview_text(reason, 140)}" if reason else ""
+        return f"Отозвано одобрение #{payload.get('approval_id')}{reason_text}"
+    if event_type == "agent_workspace_review_applied":
+        review_id = payload.get("review_id", "")
+        approval_id = payload.get("approved_item_id", "")
+        return f"Принят пункт ревью {review_id}; запись #{approval_id}"
+    if event_type == "artifact_ingested":
+        title = payload.get("title") or payload.get("artifact_id") or ""
+        return f"Добавлен материал: {preview_text(title, 160)}"
+    return f"Событие {event_type} #{event.get('id')}"
+
+
+def approval_history(core, limit: int = 20, include_revoked: bool = True) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    approvals = core.storage.list_approved_items(
+        limit=safe_limit,
+        include_revoked=include_revoked,
+    )
+    events = core.storage.list_audit_events(limit=safe_limit)
+    entries: list[dict[str, Any]] = []
+    for item in approvals:
+        entries.append({
+            "kind": "approval",
+            "approval_id": item.get("id"),
+            "item_type": item.get("item_type"),
+            "status": item.get("status"),
+            "created_at": item.get("created_at"),
+            "summary": _approval_history_summary(item),
+            "payload": item.get("payload", {}),
+        })
+    for event in events:
+        entries.append({
+            "kind": "event",
+            "event_id": event.get("id"),
+            "event_type": event.get("event_type"),
+            "created_at": event.get("created_at"),
+            "summary": _audit_history_summary(event),
+            "payload": event.get("payload", {}),
+        })
+    entries.sort(
+        key=lambda entry: (
+            float(entry.get("created_at") or 0),
+            int(entry.get("event_id") or entry.get("approval_id") or 0),
+        ),
+        reverse=True,
+    )
+    entries = entries[:safe_limit]
+    human_message = "\n".join(
+        str(entry.get("summary") or "").strip()
+        for entry in entries[:safe_limit]
+        if str(entry.get("summary") or "").strip()
+    )
+    if not human_message:
+        human_message = "История LINZA пока пустая."
+    active_count = core.storage.get_approved_item_count()
+    total_count = core.storage.get_approved_item_count(include_revoked=True)
+    return {
+        "tool": "agent_workspace",
+        "action": "history",
+        "status": "ok" if entries else "empty",
+        "read_only": True,
+        "entries": entries,
+        "human_message": human_message,
+        "human_view": {
+            "title": "История LINZA",
+            "summary": (
+                f"Активных одобрений: {active_count}. "
+                f"Отозванных: {max(0, total_count - active_count)}. "
+                f"Показано записей: {len(entries)}."
+            ),
+            "items": [entry["summary"] for entry in entries[:10]],
+        },
+        "summary": {
+            "entries": len(entries),
+            "active_approvals": active_count,
+            "total_approvals": total_count,
+            "revoked_approvals": max(0, total_count - active_count),
+            "include_revoked": bool(include_revoked),
+        },
+        "policy": [
+            "history is read-only",
+            "revoked approvals stay visible when include_revoked=true",
+            "source note bodies are not changed",
+        ],
+    }
+
+
+def revoke_approval(
+    core,
+    approval_id: Any,
+    reason: str = "",
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    parsed_id = _safe_optional_int(approval_id)
+    if parsed_id is None:
+        return {
+            "tool": "agent_workspace",
+            "action": "revoke_approval",
+            "status": "blocked",
+            "error": "approval_id_required",
+            "read_only": True,
+            "human_message": "Нужен номер одобрения из истории LINZA.",
+            "policy": ["Pass approval_id from agent_workspace(action=\"history\") or list_approved_items."],
+        }
+    approval = core.storage.get_approved_item_by_id(parsed_id)
+    if not approval:
+        return {
+            "tool": "agent_workspace",
+            "action": "revoke_approval",
+            "status": "not_found",
+            "approval_id": parsed_id,
+            "read_only": True,
+            "human_message": f"Одобрение #{parsed_id} не найдено.",
+            "policy": ["No sidecar rows were changed."],
+        }
+    if approval.get("status") == "revoked":
+        return {
+            "tool": "agent_workspace",
+            "action": "revoke_approval",
+            "status": "already_revoked",
+            "approval_id": parsed_id,
+            "approval": approval,
+            "read_only": True,
+            "human_message": f"Одобрение #{parsed_id} уже отозвано.",
+            "policy": ["Soft revoke is idempotent."],
+        }
+    if dry_run:
+        return {
+            "tool": "agent_workspace",
+            "action": "revoke_approval",
+            "status": "preview",
+            "approval_id": parsed_id,
+            "approval": approval,
+            "dry_run": True,
+            "read_only": True,
+            "human_message": (
+                f"Пробная отмена: одобрение #{parsed_id} будет помечено как отозванное. "
+                "Тексты заметок не меняются."
+            ),
+            "human_view": {
+                "title": "Пробная отмена одобрения",
+                "summary": _approval_history_summary(approval),
+                "next_steps": ["Повторите с dry_run=false, если это точно нужно отозвать."],
+            },
+            "policy": [
+                "dry-run is the default",
+                "soft revoke changes only the sidecar approval status when applied",
+                "source note bodies are not changed",
+            ],
+        }
+    updated = core.storage.revoke_approved_item(parsed_id)
+    event_id = core.storage.record_audit_event("approval_revoked", {
+        "approval_id": parsed_id,
+        "item_type": approval.get("item_type", ""),
+        "reason": str(reason or ""),
+    })
+    return {
+        "tool": "agent_workspace",
+        "action": "revoke_approval",
+        "status": "revoked",
+        "approval_id": parsed_id,
+        "approval": updated,
+        "audit_event_id": event_id,
+        "dry_run": False,
+        "read_only": False,
+        "human_message": (
+            f"Одобрение #{parsed_id} отозвано. LINZA больше не будет использовать его "
+            "как активный пример; запись осталась в истории."
+        ),
+        "human_view": {
+            "title": "Одобрение отозвано",
+            "summary": _approval_history_summary(updated or approval),
+            "next_steps": ["При необходимости откройте историю, чтобы увидеть след действия."],
+        },
+        "policy": [
+            "soft revoke does not delete history",
+            "active learning and graph helpers ignore revoked approvals",
+            "source note bodies are not changed",
+        ],
+    }
+
+
 async def agent_workspace(
     core,
     action: str,
@@ -1054,6 +1271,9 @@ async def agent_workspace(
     query: str = "",
     trace: dict[str, Any] | None = None,
     trace_id: str = "",
+    approval_id: Any = None,
+    reason: str = "",
+    include_revoked: bool = True,
     limit: int = 20,
     **_kwargs: Any,
 ) -> dict[str, Any]:
@@ -1091,6 +1311,19 @@ async def agent_workspace(
             source_kind=source_kind,
             batch_id=batch_id,
             trace_id=trace_id,
+        ))
+    if normalized_action == "revoke_approval":
+        return _attach_workspace_state(core, revoke_approval(
+            core,
+            approval_id=approval_id if approval_id is not None else _kwargs.get("approval_id"),
+            reason=reason or str(_kwargs.get("reason", "")),
+            dry_run=dry_run,
+        ))
+    if normalized_action == "history":
+        return _attach_workspace_state(core, approval_history(
+            core,
+            limit=safe_limit,
+            include_revoked=include_revoked,
         ))
     if normalized_action == "teach":
         return _attach_workspace_state(core, await teach_workspace(
@@ -1156,6 +1389,8 @@ __all__ = [
     "doctor",
     "export_context",
     "grow_workspace",
+    "approval_history",
+    "revoke_approval",
     "teach_workspace",
     "search_memory",
     "workspace_map",

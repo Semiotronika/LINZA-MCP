@@ -1,4 +1,4 @@
-from test_support import *
+from tests.test_support import *
 
 
 class DraftMapTests(OperatorTestCase):

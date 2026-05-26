@@ -48,7 +48,7 @@ async def run_doctor(
             "ok",
             (
                 f"{copy_summary['copy_markdown_files']} copied notes, "
-                f"{copy_summary['queue_summary']['items']} review cards, "
+                f"{copy_summary['queue_summary']['items']} review items, "
                 f"{copy_summary['selected_approvals_written_or_recorded']} selected approvals."
             ),
         ),
@@ -107,7 +107,7 @@ async def run_doctor(
             "next_steps": [
                 "Use LINZA on a copy first when testing new review/apply behavior.",
                 "Load real logs or articles through the artifact inbox.",
-                "Review proposed cards before accepting memory, relations, or metadata.",
+                "Review proposed items before accepting memory, relations, or metadata.",
                 "Use context export when an agent needs a compact packet for work.",
             ],
         },

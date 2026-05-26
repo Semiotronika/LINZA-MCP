@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.1.5 - 2026-05-26
+
+Human-facing review and release cleanup.
+
+### Added
+
+- `agent_workspace(action="history")` for a readable local log of applied
+  approvals and follow-up actions.
+- `agent_workspace(action="revoke_approval")` and storage-level soft revoke, so
+  an approved item can be removed from active learning without deleting its
+  audit trail.
+- Human display lines for review items, making agent output easier to show
+  without dumping raw JSON.
+
+### Changed
+
+- Default MCP surface is now limited to the main 7 tools; specialized review
+  helpers remain available through `agent_workspace` or the advanced surface.
+- Active learning and map helpers ignore revoked approvals by default, while
+  audit views can include them explicitly.
+- Regression tests now live under `tests/`.
+
+### Documentation
+
+- Reworked Russian and English README wording around review items, local
+  history, and safe apply/revoke flow.
+
 ## 0.1.4 - 2026-05-20
 
 Index safety hardening before broader catalog submission.

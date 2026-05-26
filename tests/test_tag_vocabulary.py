@@ -9,7 +9,7 @@ from linza_mcp import (
     extract_tags,
     normalize_tag,
 )
-from test_support import StableTestEmbeddingProvider
+from tests.test_support import StableTestEmbeddingProvider
 
 
 class TagVocabularyTests(unittest.TestCase):

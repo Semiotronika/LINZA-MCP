@@ -1,4 +1,4 @@
-from test_support import *
+from tests.test_support import *
 
 
 class OperatorSurfaceTests(OperatorTestCase):
@@ -258,20 +258,20 @@ class OperatorSurfaceTests(OperatorTestCase):
             tools = {tool.name: tool for tool in result.root.tools}
 
             self.assertEqual(set(tools), set(DEFAULT_MCP_TOOLS))
-            self.assertEqual(len(DEFAULT_MCP_TOOLS), 15)
+            self.assertEqual(len(DEFAULT_MCP_TOOLS), 7)
             self.assertEqual(set(DEFAULT_MCP_TOOLS) | set(ADVANCED_MCP_TOOLS), set(TOOL_GUIDE))
             self.assertTrue(set(DEFAULT_MCP_TOOLS).isdisjoint(set(ADVANCED_MCP_TOOLS)))
             self.assertEqual(set(TOOL_AUDIENCE), set(TOOL_GUIDE))
             self.assertEqual(TOOL_AUDIENCE["guide_next_steps"], "human_entry")
             self.assertEqual(TOOL_AUDIENCE["agent_workspace"], "agent_facade")
             self.assertIn("agent_workspace", tools)
-            self.assertIn("build_review_apply_queue", tools)
+            self.assertIn("scan_vault", tools)
+            self.assertNotIn("build_review_apply_queue", tools)
+            self.assertNotIn("approve_review_queue_items", tools)
+            self.assertNotIn("create_context_pack", tools)
+            self.assertNotIn("write_file", tools)
             self.assertNotIn("create_profile", tools)
             self.assertNotIn("build_diagnostic_report", tools)
-            self.assertEqual(
-                tools["build_review_apply_queue"].inputSchema["properties"]["path"]["default"],
-                REPORT_DEFAULTS["review_apply_queue"],
-            )
             self.assertFalse(
                 tools["guide_next_steps"].inputSchema["properties"]["include_tool_guide"]["default"],
             )
@@ -285,7 +285,12 @@ class OperatorSurfaceTests(OperatorTestCase):
             self.assertIn("grow", tools["agent_workspace"].inputSchema["properties"]["action"]["enum"])
             self.assertIn("record_trace", tools["agent_workspace"].inputSchema["properties"]["action"]["enum"])
             self.assertIn("review_calibr", tools["agent_workspace"].inputSchema["properties"]["action"]["enum"])
+            self.assertIn("history", tools["agent_workspace"].inputSchema["properties"]["action"]["enum"])
+            self.assertIn("revoke_approval", tools["agent_workspace"].inputSchema["properties"]["action"]["enum"])
             self.assertIn("doctor", tools["agent_workspace"].inputSchema["properties"]["action"]["enum"])
+            self.assertIn("approval_id", tools["agent_workspace"].inputSchema["properties"])
+            self.assertIn("reason", tools["agent_workspace"].inputSchema["properties"])
+            self.assertIn("include_revoked", tools["agent_workspace"].inputSchema["properties"])
             self.assertEqual(tools["agent_workspace"].inputSchema["properties"]["max_notes"]["default"], 120)
             self.assertEqual(tools["agent_workspace"].inputSchema["properties"]["max_domains"]["default"], 8)
             self.assertEqual(tools["agent_workspace"].inputSchema["properties"]["mode"]["default"], "assisted")
@@ -307,7 +312,12 @@ class OperatorSurfaceTests(OperatorTestCase):
                     "linza",
                 )
                 self.assertIn("create_profile", advanced_tools)
+                self.assertIn("build_review_apply_queue", advanced_tools)
                 self.assertIn("build_diagnostic_report", advanced_tools)
+                self.assertEqual(
+                    advanced_tools["build_review_apply_queue"].inputSchema["properties"]["path"]["default"],
+                    REPORT_DEFAULTS["review_apply_queue"],
+                )
             finally:
                 advanced_server.storage.close()
         finally:
@@ -323,12 +333,12 @@ class OperatorSurfaceTests(OperatorTestCase):
             self.assertEqual(guide_en["language"], "en")
             self.assertEqual(guide_en["user_view"]["language"], "en")
             self.assertEqual(guide_en["user_view"]["title"], "Maintain the map")
-            self.assertIn("accept the card", guide_en["user_view"]["how_to_answer"])
+            self.assertIn("accept the item", guide_en["user_view"]["how_to_answer"])
 
             self.assertEqual(guide_ru["language"], "ru")
             self.assertEqual(guide_ru["user_view"]["language"], "ru")
             self.assertIn("карту", guide_ru["user_view"]["title"].lower())
-            self.assertIn("принять карточку", guide_ru["user_view"]["how_to_answer"])
+            self.assertIn("принять пункт", guide_ru["user_view"]["how_to_answer"])
         finally:
             storage.close()
             tmp.cleanup()
@@ -358,7 +368,7 @@ class OperatorSurfaceTests(OperatorTestCase):
         from linza_mcp.artifacts import ALLOWED_ARTIFACT_SUFFIXES
         from linza_mcp.compat import __version__
 
-        root = Path(__file__).parent
+        root = Path(__file__).resolve().parents[1]
         required = [
             root / "README.md",
             root / "README_EN.md",
@@ -403,17 +413,17 @@ class OperatorSurfaceTests(OperatorTestCase):
         for marker in forbidden:
             self.assertNotIn(marker, combined)
 
-        self.assertIn("локальный review-gated sidecar", (root / "README.md").read_text(encoding="utf-8"))
+        self.assertIn("локальный служебный слой", (root / "README.md").read_text(encoding="utf-8"))
         self.assertIn("Local MCP Server", (root / "README_EN.md").read_text(encoding="utf-8"))
         self.assertIn("mcp-name: io.github.Semiotronika/LINZA-MCP", (root / "README.md").read_text(encoding="utf-8"))
         self.assertNotIn("NOUZ", (root / "README.md").read_text(encoding="utf-8"))
         self.assertNotIn("NOUZ", (root / "README_EN.md").read_text(encoding="utf-8"))
         self.assertNotIn("назначаются вручную", (root / "README.md").read_text(encoding="utf-8"))
         self.assertNotIn("coverage", (root / "README.md").read_text(encoding="utf-8"))
-        self.assertIn("Obsidian или любой другой", (root / "README.md").read_text(encoding="utf-8"))
+        self.assertIn("LINZA работает с Obsidian", (root / "README.md").read_text(encoding="utf-8"))
         self.assertIn("It does not change your data", (root / "README_EN.md").read_text(encoding="utf-8"))
-        self.assertIn("First Output Example", (root / "README_EN.md").read_text(encoding="utf-8"))
-        self.assertIn("prompt injection", (root / "README.md").read_text(encoding="utf-8"))
+        self.assertIn("What Review Looks Like", (root / "README_EN.md").read_text(encoding="utf-8"))
+        self.assertIn("промпт-инъекций", (root / "README.md").read_text(encoding="utf-8"))
         self.assertIn("prompt-injection", (root / "README_EN.md").read_text(encoding="utf-8"))
         public_embedding_docs = "\n".join(
             path.read_text(encoding="utf-8")

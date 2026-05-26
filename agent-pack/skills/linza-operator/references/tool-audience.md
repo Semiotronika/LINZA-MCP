@@ -11,15 +11,15 @@ development, but are hidden unless the server is started with
 
 - `guide_next_steps`
 - `agent_workspace(action="doctor")`
-- review cards from `build_review_apply_queue`
-- review cards from `agent_workspace(action="review_next")`
+- review items from `build_review_apply_queue`
+- review items from `agent_workspace(action="review_next")`
 
 ## Agent Facade
 
 - `agent_workspace`
 
-Use it for artifact inbox, trace review, memory search, review cards, apply
-review items, supervised growth, and context export.
+Use it for artifact inbox, trace review, memory search, review items, apply,
+history, soft revoke, supervised growth, and context export.
 
 ## Agent Read Tools
 

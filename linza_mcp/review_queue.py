@@ -74,6 +74,7 @@ def redacted_queue_item(item: Dict[str, Any]) -> Dict[str, Any]:
         safe["memory_type"] = arguments.get("memory_type")
     if item.get("human"):
         safe["human"] = item["human"]
+    safe["display"] = redacted_queue_display(safe)
     return safe
 
 
@@ -87,6 +88,101 @@ def evidence_trace_entry(label: str, value: Any, weight: str = "medium") -> dict
         "value": value,
         "weight": weight,
     }
+
+
+def _display_text(value: Any, limit: int = 260) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    replacements = {
+        "terms=": "термины: ",
+        "shape=": "структура: ",
+        "notes=": "заметок: ",
+        "Central note candidate": "кандидат на главную заметку",
+        "links, role, title, and readable size": "ссылки, тип, заголовок и размер заметки",
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    text = re.sub(r"\s+", " ", text)
+    return text if len(text) <= limit else f"{text[:limit - 1].rstrip()}…"
+
+
+def _display_basis(item: Dict[str, Any]) -> str:
+    evidence = _display_text(item.get("evidence"))
+    if evidence:
+        return evidence
+    trace = item.get("evidence_trace", []) or []
+    labels = [
+        str(entry.get("label", "")).strip()
+        for entry in trace[:3]
+        if str(entry.get("label", "")).strip()
+    ]
+    if labels:
+        return f"есть признаки: {', '.join(labels)}"
+    return "есть локальные признаки, которые стоит проверить человеком"
+
+
+def review_card_display(item: Dict[str, Any]) -> Dict[str, Any]:
+    human = item.get("human") if isinstance(item.get("human"), dict) else {}
+    title = _display_text(item.get("title"), 180) or str(human.get("label") or item.get("kind") or "пункт")
+    lines = []
+    if item.get("id"):
+        lines.append(f"Пункт ревью: {item['id']}")
+    lines.append(f"Предложение: {title}")
+    question = _display_text(human.get("question"), 220)
+    if question:
+        lines.append(f"Вопрос: {question}")
+    basis = _display_basis(item)
+    if basis:
+        lines.append(f"Основание: {basis}")
+    change = _display_text(human.get("write_preview"), 260) or "Без подтверждения LINZA ничего не записывает."
+    lines.append(f"Что изменится: {change}")
+    lines = lines[:5]
+    return {
+        "lines": lines,
+        "text": "\n".join(lines),
+    }
+
+
+def redacted_queue_display(item: Dict[str, Any]) -> Dict[str, Any]:
+    human = item.get("human") if isinstance(item.get("human"), dict) else {}
+    label = _display_text(human.get("label"), 120) or str(item.get("kind") or "пункт")
+    lines = []
+    if item.get("id"):
+        lines.append(f"Пункт ревью: {item['id']}")
+    lines.append(f"Предложение: проверить {label}")
+    question = _display_text(human.get("question"), 220)
+    if question:
+        lines.append(f"Вопрос: {question}")
+    evidence_count = int(item.get("evidence_count") or 0)
+    lines.append(
+        f"Основание: {evidence_count} признаков скрыты в безопасном кратком виде."
+        if evidence_count
+        else "Основание: подробности скрыты в безопасном кратком виде."
+    )
+    change = _display_text(human.get("write_preview"), 260) or "Без подтверждения LINZA ничего не записывает."
+    lines.append(f"Что изменится: {change}")
+    lines = lines[:5]
+    return {
+        "lines": lines,
+        "text": "\n".join(lines),
+    }
+
+
+def attach_queue_item_displays(items: list[Dict[str, Any]]) -> None:
+    for item in items:
+        item["display"] = review_card_display(item)
+
+
+def queue_human_message(items: list[Dict[str, Any]], limit: int = 5) -> str:
+    texts = [
+        str((item.get("display") or {}).get("text") or "").strip()
+        for item in items[: max(1, int(limit))]
+    ]
+    texts = [text for text in texts if text]
+    if not texts:
+        return "LINZA не нашла пунктов для показа."
+    return "\n\n".join(texts)
 
 
 def stage_bucket_order(analysis_stage: str, include_memory: bool) -> tuple[str, ...]:
@@ -109,7 +205,7 @@ def stage_bucket_order(analysis_stage: str, include_memory: bool) -> tuple[str, 
 
 
 def human_review_metadata(kind: str, role: str = "", memory_type: str = "", relation: str = "", type_id: str = "") -> dict[str, Any]:
-    """Return the user-facing review contract for a queue card."""
+    """Return the user-facing review contract for a queue item."""
     if kind == "material_type":
         label = type_id or "найденный тип"
         return {
@@ -117,7 +213,7 @@ def human_review_metadata(kind: str, role: str = "", memory_type: str = "", rela
             "label": "название типа материала",
             "question": f"Как назвать найденный тип `{label}` для этой базы?",
             "user_options": ["назвать тип", "разделить группу", "объединить с другим типом", "пропустить"],
-            "write_preview": "Если принять, LINZA сохранит название типа в `.linza`; Markdown-заметки не меняются. YAML `role` появится только отдельной review-карточкой после этого.",
+            "write_preview": "Если принять, LINZA сохранит название типа в `.linza`; Markdown-заметки не меняются. YAML `role` появится только отдельным пунктом ревью после этого.",
         }
     if kind == "role":
         role_info = role_review_metadata(role)
@@ -166,8 +262,8 @@ def human_review_metadata(kind: str, role: str = "", memory_type: str = "", rela
         }
     return {
         "kind": kind,
-        "label": "карточка",
-        "question": "Эту карточку стоит принять?",
+        "label": "пункт",
+        "question": "Этот пункт стоит принять?",
         "user_options": ["принять", "изменить", "пропустить"],
         "write_preview": "LINZA покажет preview перед любой записью.",
     }
@@ -251,7 +347,7 @@ def apply_queue_markdown(items: list[Dict[str, Any]], summary: Dict[str, Any], r
     else:
         lines.extend([
             "Each item contains a dry-run `approve_draft_item` payload. Run dry-run first, then set `dry_run=false` only for the exact item you accept.",
-            "For selected cards, use `approve_review_queue_items` with the stable IDs shown below.",
+            "For selected items, use `approve_review_queue_items` with the stable IDs shown below.",
         ])
     lines.extend(["", "## Map Snapshot", ""])
     for key in ("notes", "candidate_domains", "role_drafts", "event_flow_items", "review_items"):
@@ -582,6 +678,7 @@ async def build_review_apply_queue(
         if not queue_item_already_resolved(core, item, approved_signatures)
     ]
     assign_queue_item_ids(items)
+    attach_queue_item_displays(items)
 
     kind_counts = Counter(item["kind"] for item in items)
     response_items = redacted_queue_items(items) if redact else items
@@ -595,6 +692,7 @@ async def build_review_apply_queue(
             "bucket_order": list(bucket_order),
         },
         "items": response_items,
+        "human_message": queue_human_message(response_items),
         "summary": {
             "items": len(items),
             "by_kind": kind_counts.most_common(),
@@ -605,7 +703,7 @@ async def build_review_apply_queue(
         "markdown": markdown,
         "policy": [
             "This queue does not apply changes by itself.",
-            "Memory cards are opt-in; pass include_memory=true to review durable memory candidates.",
+            "Memory items are opt-in; pass include_memory=true to review durable memory candidates.",
             "Redacted queues hide approval payloads and are for safe summaries, not apply actions." if redact else "Every approval payload keeps dry_run=true.",
             "Use a full local queue before applying selected IDs." if redact else "Set dry_run=false only for one reviewed item at a time.",
         ],
@@ -1374,7 +1472,7 @@ async def apply_learned_review_queue(
     allow_overwrite: bool = False,
     include_memory: bool = False,
 ) -> Dict[str, Any]:
-    """Select queue cards from accepted examples, then preview/apply them."""
+    """Select queue items from accepted examples, then preview/apply them."""
     normalized_mode = str(mode or "review").strip().lower()
     if normalized_mode not in {"review", "assisted", "autopilot"}:
         return {
@@ -1427,7 +1525,7 @@ async def apply_learned_review_queue(
         },
         "policy": [
             "review mode never selects or applies items automatically.",
-            "assisted mode selects only cards supported by accepted examples and local learning rules.",
+            "assisted mode selects only review items supported by accepted examples and local learning rules.",
             "autopilot can select more sidecar relations after examples, but still supports dry_run.",
             "Existing note bodies must remain unchanged; source-note content is not rewritten.",
         ],
@@ -1597,6 +1695,9 @@ __all__ = [
     "assign_queue_item_ids",
     "redacted_queue_item",
     "redacted_queue_items",
+    "review_card_display",
+    "attach_queue_item_displays",
+    "queue_human_message",
     "human_review_metadata",
     "apply_queue_markdown",
     "build_review_apply_queue",
