@@ -364,6 +364,66 @@ class OperatorSurfaceTests(OperatorTestCase):
         self.assertEqual(help_exit.exception.code, 0)
         self.assertIn("Run the LINZA MCP stdio server.", help_output.getvalue())
 
+    def test_main_cold_start_does_not_probe_embeddings(self):
+        import os
+        from unittest.mock import patch
+
+        from linza_mcp.server import main
+
+        class FailingEmbeddingProvider:
+            api_url = "fail://embedding-provider"
+            model = "unavailable"
+
+            async def embed(self, texts):
+                raise AssertionError("LINZA startup must not call the embedding provider")
+
+        observed = {}
+
+        async def fake_run(server):
+            observed["profiles"] = server.storage.list_profiles()
+            observed["active_profile"] = server.storage.get_active_profile()
+            server.storage.close()
+
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            env = {
+                "LINZA_VAULT": str(Path(tmp.name) / "vault"),
+                "LINZA_EMBED_PROVIDER": "lmstudio",
+                "LINZA_EMBED_URL": "http://127.0.0.1:65535/v1",
+                "LINZA_EMBED_MODEL": "offline-test",
+            }
+            with patch.dict(os.environ, env, clear=False):
+                with patch("linza_mcp.server.get_embedding_provider", return_value=FailingEmbeddingProvider()):
+                    with patch("linza_mcp.server.LinzaMCPServer.run", fake_run):
+                        asyncio.run(main())
+
+            self.assertEqual(observed["profiles"], [])
+            self.assertIsNone(observed["active_profile"])
+        finally:
+            tmp.cleanup()
+
+    def test_search_without_indexed_embeddings_does_not_probe_provider(self):
+        class FailingEmbeddingProvider:
+            api_url = "fail://embedding-provider"
+            model = "unavailable"
+
+            async def embed(self, texts):
+                raise AssertionError("Empty search must not call the embedding provider")
+
+        tmp = tempfile.TemporaryDirectory()
+        vault = Path(tmp.name)
+        storage = Storage(vault / ".linza" / "linza.db")
+        core = LinzaCore(vault, storage, FailingEmbeddingProvider())
+        try:
+            result = asyncio.run(core.search("anything", top_k=3))
+
+            self.assertEqual(result["results"], [])
+            self.assertEqual(result["embedding_index"]["status"], "empty")
+            self.assertIn("No indexed embeddings", result["message"])
+        finally:
+            storage.close()
+            tmp.cleanup()
+
     def test_publishable_agent_pack_docs_are_private_safe(self):
         from linza_mcp.artifacts import ALLOWED_ARTIFACT_SUFFIXES
         from linza_mcp.compat import __version__

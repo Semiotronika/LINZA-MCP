@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- LINZA cold start no longer creates the default search profile by calling the
+  embedding provider. Hosted runners can now start the MCP server and list tools
+  even when LM Studio or another embedding endpoint is unavailable.
+- Empty semantic search now returns a setup message before probing the embedding
+  provider when no searchable embeddings are stored yet.
+
 ## 0.1.5 - 2026-05-26
 
 Human-facing review and release cleanup.

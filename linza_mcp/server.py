@@ -750,18 +750,13 @@ async def main() -> None:
     )
     server = LinzaMCPServer(vault_path, provider, config)
 
-    if not server.storage.list_profiles():
-        general_keywords = "general notes ideas thoughts knowledge"
-        raw, centered = await server.core._compute_embeddings([general_keywords])
-        server.storage.set_profile(
-            "general",
-            general_keywords,
-            raw[0],
-            centered[0],
-            "Default general-purpose profile",
-        )
-        server.storage.set_active_profile("general")
-        logging.info("Created default 'general' profile")
+    active_profile = server.storage.get_active_profile()
+    if active_profile and server.storage.get_profile(active_profile):
+        logging.info("Using active profile '%s'", active_profile)
+    elif server.storage.list_profiles():
+        logging.info("Search profiles are available; no active profile is selected yet.")
+    else:
+        logging.info("No search profiles configured; starting without probing the embedding provider.")
 
     await server.run()
 

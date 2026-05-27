@@ -678,13 +678,16 @@ async def search(
     explain: bool = False,
 ) -> Dict[str, Any]:
     """Search files with calibrated semantic similarity plus lightweight lexical support."""
-    _, centered = await compute_embeddings(core, [query])
-    q_vec = np.array(centered[0], dtype=float)
-
     all_emb = core.storage.get_all_embeddings(use_centered=True)
-    if not all_emb:
-        return {"results": [], "profile": profile_name, "explanation": None}
     index_status = embedding_index_status(core)
+    if not all_emb or index_status["status"] == "empty":
+        return {
+            "results": [],
+            "profile": profile_name,
+            "explanation": None,
+            "message": "No indexed embeddings are stored yet. Run index_all after configuring an embedding provider.",
+            "embedding_index": index_status,
+        }
     if index_status["status"] == "needs_reindex":
         return {
             "results": [],
@@ -704,6 +707,19 @@ async def search(
             "message": sync_status["message"],
             "sync": sync_status,
         }
+
+    try:
+        _, centered = await compute_embeddings(core, [query])
+    except Exception as exc:
+        return {
+            "results": [],
+            "profile": profile_name,
+            "explanation": None,
+            "error": "embedding_provider_unavailable",
+            "message": f"Embedding provider is unavailable: {exc}",
+            "embedding_index": index_status,
+        }
+    q_vec = np.array(centered[0], dtype=float)
 
     paths, vectors = zip(*all_emb)
     try:
