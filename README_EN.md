@@ -315,7 +315,7 @@ It tells an agent how to start with `doctor`, when to show review items, how to 
 
 ## Stability
 
-`0.1.5` is an alpha MVP. The main safety contract is meant to be stable: indexing, artifact ingest, search, map, and grow preview do not rewrite source note bodies. Low-level advanced tools and internal module boundaries may still change while the server is being polished.
+`0.1.6` is an alpha MVP. The main safety contract is meant to be stable: indexing, artifact ingest, search, map, and grow preview do not rewrite source note bodies. Low-level advanced tools and internal module boundaries may still change while the server is being polished.
 
 ---
 
