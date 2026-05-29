@@ -548,6 +548,7 @@ class OperatorSurfaceTests(OperatorTestCase):
         self.assertEqual(server_json["packages"][0]["registryType"], "pypi")
         self.assertEqual(server_json["packages"][0]["identifier"], "linza-mcp")
         self.assertEqual(server_json["packages"][0]["version"], __version__)
+        self.assertEqual(server_json["packages"][0]["runtimeHint"], "uvx")
         self.assertEqual(server_json["packages"][0]["transport"]["type"], "stdio")
         env_names = {
             item["name"]

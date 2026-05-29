@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.7 - 2026-05-29
+
+### Fixed
+
+- Added the MCP Registry `runtimeHint: "uvx"` for the PyPI package so hosted
+  catalog runners can start LINZA through the Python package runtime instead of
+  spawning a bare `linza-mcp` command outside the virtual environment.
+
 ## 0.1.6 - 2026-05-27
 
 ### Fixed

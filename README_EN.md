@@ -171,6 +171,10 @@ VS Code / Copilot MCP uses `servers`:
 }
 ```
 
+Registry and hosted catalog installs should use the package metadata in
+`server.json`. LINZA declares `runtimeHint: "uvx"` for its PyPI package so those
+runners can start it without relying on a globally installed `linza-mcp` binary.
+
 ### 5. Check the setup
 
 ```powershell
@@ -315,7 +319,7 @@ It tells an agent how to start with `doctor`, when to show review items, how to 
 
 ## Stability
 
-`0.1.6` is an alpha MVP. The main safety contract is meant to be stable: indexing, artifact ingest, search, map, and grow preview do not rewrite source note bodies. Low-level advanced tools and internal module boundaries may still change while the server is being polished.
+`0.1.7` is an alpha MVP. The main safety contract is meant to be stable: indexing, artifact ingest, search, map, and grow preview do not rewrite source note bodies. Low-level advanced tools and internal module boundaries may still change while the server is being polished.
 
 ---
 
