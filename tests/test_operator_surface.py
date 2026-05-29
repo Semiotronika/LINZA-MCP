@@ -264,6 +264,14 @@ class OperatorSurfaceTests(OperatorTestCase):
             self.assertEqual(set(TOOL_AUDIENCE), set(TOOL_GUIDE))
             self.assertEqual(TOOL_AUDIENCE["guide_next_steps"], "human_entry")
             self.assertEqual(TOOL_AUDIENCE["agent_workspace"], "agent_facade")
+            for tool in tools.values():
+                self.assertIsNotNone(tool.annotations, tool.name)
+                self.assertTrue(tool.description, tool.name)
+                for name, schema in tool.inputSchema.get("properties", {}).items():
+                    self.assertIn("description", schema, f"{tool.name}.{name}")
+            self.assertFalse(tools["index_all"].annotations.readOnlyHint)
+            self.assertTrue(tools["read_file"].annotations.readOnlyHint)
+            self.assertFalse(tools["agent_workspace"].annotations.readOnlyHint)
             self.assertIn("agent_workspace", tools)
             self.assertIn("scan_vault", tools)
             self.assertNotIn("build_review_apply_queue", tools)
@@ -491,7 +499,7 @@ class OperatorSurfaceTests(OperatorTestCase):
         for marker in forbidden:
             self.assertNotIn(marker, combined)
 
-        self.assertIn("локальный служебный слой", (root / "README.md").read_text(encoding="utf-8"))
+        self.assertIn("локальный MCP-сервер", (root / "README.md").read_text(encoding="utf-8"))
         self.assertIn("Local MCP Server", (root / "README_EN.md").read_text(encoding="utf-8"))
         self.assertIn("mcp-name: io.github.Semiotronika/LINZA-MCP", (root / "README.md").read_text(encoding="utf-8"))
         self.assertNotIn("NOUZ", (root / "README.md").read_text(encoding="utf-8"))
@@ -501,7 +509,7 @@ class OperatorSurfaceTests(OperatorTestCase):
         self.assertIn("LINZA работает с Obsidian", (root / "README.md").read_text(encoding="utf-8"))
         self.assertIn("It does not change your data", (root / "README_EN.md").read_text(encoding="utf-8"))
         self.assertIn("What Review Looks Like", (root / "README_EN.md").read_text(encoding="utf-8"))
-        self.assertIn("промпт-инъекций", (root / "README.md").read_text(encoding="utf-8"))
+        self.assertIn("prompt injection", (root / "README.md").read_text(encoding="utf-8"))
         self.assertIn("prompt-injection", (root / "README_EN.md").read_text(encoding="utf-8"))
         public_embedding_docs = "\n".join(
             path.read_text(encoding="utf-8")
@@ -582,10 +590,10 @@ class OperatorSurfaceTests(OperatorTestCase):
                 "LINZA_BRIDGE_THRESHOLD",
                 "LINZA_MAX_BRIDGE_PAIRS",
                 "LINZA_DEFAULT_PROFILE",
-                "LINZA_TOOL_SURFACE",
                 "LINZA_LANGUAGE",
             },
         )
+        self.assertNotIn("LINZA_TOOL_SURFACE", env_names)
         glama = json.loads((root / "glama.json").read_text(encoding="utf-8"))
         self.assertEqual(glama["$schema"], "https://glama.ai/mcp/schemas/server.json")
         self.assertIn("Semiotronika", glama["maintainers"])
@@ -613,10 +621,10 @@ class OperatorSurfaceTests(OperatorTestCase):
         with self.assertRaisesRegex(ValueError, "lmstudio, openai, or ollama"):
             get_embedding_provider(removed_provider_name)
 
-        self.assertIn("examples/sample-vault", combined)
+        self.assertIn("tests/fixtures/linza-sample-pack", combined)
         self.assertIn("TOOL_AUDIENCE", combined)
         self.assertIn("DEFAULT_MCP_TOOLS", combined)
-        self.assertIn("LINZA_TOOL_SURFACE=advanced", combined)
+        self.assertIn("low-level mode", combined)
         self.assertIn("browser/web-fetch", combined)
         self.assertIn("source_kind=\"web_article\"", combined)
         self.assertIn("Tool Catalog", combined)

@@ -2,17 +2,17 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.Semiotronika/LINZA-MCP",
   "title": "LINZA",
-  "description": "Local-first MCP sidecar for Markdown artifacts, review items, and supervised knowledge growth.",
+  "description": "Local-first MCP sidecar for Markdown artifacts, review intents, and supervised knowledge growth.",
   "repository": {
     "url": "https://github.com/Semiotronika/LINZA-MCP",
     "source": "github"
   },
-  "version": "0.1.9",
+  "version": "0.2.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "linza-mcp",
-      "version": "0.1.9",
+      "version": "0.2.0",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
@@ -65,12 +65,6 @@
         {
           "name": "LINZA_DEFAULT_PROFILE",
           "description": "Default search profile name. Defaults to general.",
-          "isRequired": false,
-          "format": "string"
-        },
-        {
-          "name": "LINZA_TOOL_SURFACE",
-          "description": "Tool surface. Allowed values: default, advanced. Default: default.",
           "isRequired": false,
           "format": "string"
         },

@@ -183,6 +183,66 @@ class AgentWorkspaceTests(OperatorTestCase):
             storage.close()
             tmp.cleanup()
 
+    def test_agent_workspace_routes_vault_review_queue_through_public_facade(self):
+        tmp, vault, storage, core = self.make_core()
+        try:
+            (vault / "Product").mkdir()
+            (vault / "Product" / "Product Overview.md").write_text(
+                "# Product Overview\n\nProject overview for a semantic graph and review queue.\n",
+                encoding="utf-8",
+            )
+            (vault / "Product" / "Product Decision.md").write_text(
+                "# Product Decision\n\nDecision: apply confident examples only after review.\n",
+                encoding="utf-8",
+            )
+            asyncio.run(core.index_vault(force=True))
+
+            review = asyncio.run(core.agent_workspace(
+                action="review_next",
+                kind="domain",
+                max_notes=20,
+                max_domains=4,
+                limit=5,
+            ))
+
+            self.assertEqual(review["tool"], "agent_workspace")
+            self.assertEqual(review["action"], "review_next")
+            self.assertEqual(review["review_surface"], "vault")
+            self.assertTrue(review["read_only"])
+            self.assertTrue(review["items"])
+            self.assertTrue(all(item["id"].startswith("rq-") for item in review["items"]))
+            self.assertIn("review_cards", review)
+            self.assertIn("human_view", review)
+            self.assertEqual(len(review["review_cards"]), len(review["items"]))
+            self.assertEqual(review["human_view"]["cards"], review["review_cards"])
+            card = review["review_cards"][0]
+            self.assertEqual(card["review_id"], review["items"][0]["id"])
+            self.assertIn("kind_label", card)
+            self.assertIn("intent", card)
+            self.assertEqual(card["intent_status"], "review_required")
+            self.assertIn("decision", card)
+            self.assertIn("question", card)
+            self.assertIn("effect", card)
+            self.assertTrue(card["related_notes"])
+            self.assertNotEqual(card["decision"], card["review_id"])
+            self.assertEqual(card["dry_run_arguments"]["item_ids"], [review["items"][0]["id"]])
+            self.assertTrue(card["dry_run_arguments"]["dry_run"])
+
+            preview = asyncio.run(core.agent_workspace(
+                action="apply_review_items",
+                item_ids=[review["items"][0]["id"]],
+                max_notes=20,
+                max_domains=4,
+            ))
+            self.assertEqual(preview["tool"], "agent_workspace")
+            self.assertEqual(preview["review_surface"], "vault")
+            self.assertEqual(preview["status"], "preview")
+            self.assertTrue(preview["read_only"])
+            self.assertEqual(storage.list_approved_items("domain"), [])
+        finally:
+            storage.close()
+            tmp.cleanup()
+
     def test_agent_workspace_can_soft_revoke_approval_and_show_history(self):
         tmp, vault, storage, core = self.make_core()
         try:
@@ -588,7 +648,7 @@ class AgentWorkspaceTests(OperatorTestCase):
             self.assertIn("Found 71 web pages", raw_dump)
             self.assertGreater(analysis["summary"]["events"], analysis["summary"]["reviewable_events"])
             self.assertTrue(analysis["reviewable_events"])
-            self.assertTrue(analysis["quant_candidates"])
+            self.assertTrue(analysis["knowledge_candidates"])
 
             review = asyncio.run(core.agent_workspace(
                 action="review_next",
@@ -604,23 +664,23 @@ class AgentWorkspaceTests(OperatorTestCase):
             self.assertNotIn("User wants background", dump)
             self.assertIn("raw imported artifacts immutable", dump)
             self.assertIn("similarity scoring can overstate relevance", dump)
-            self.assertTrue(any(item["kind"] == "quant_candidate" for item in review["items"]))
+            self.assertTrue(any(item["kind"] == "knowledge_candidate" for item in review["items"]))
             self.assertTrue(all(
                 item["payload"].get("review_quality", {}).get("status") == "reviewable"
                 for item in review["items"]
-                if item["kind"] in {"memory_candidate", "quant_candidate"}
+                if item["kind"] in {"memory_candidate", "knowledge_candidate"}
             ))
         finally:
             storage.close()
             tmp.cleanup()
 
-    def test_examples_sample_pack_runs_end_to_end(self):
-        examples_root = Path(__file__).resolve().parents[1] / "examples"
+    def test_internal_sample_pack_runs_end_to_end(self):
+        fixture_root = Path(__file__).resolve().parent / "fixtures" / "linza-sample-pack"
         tmp = tempfile.TemporaryDirectory()
         vault = Path(tmp.name) / "sample-vault"
         storage = None
         try:
-            shutil.copytree(examples_root / "sample-vault", vault)
+            shutil.copytree(fixture_root / "sample-vault", vault)
             source_hashes = {
                 path.relative_to(vault).as_posix(): path.read_text(encoding="utf-8")
                 for path in vault.rglob("*.md")
@@ -641,33 +701,33 @@ class AgentWorkspaceTests(OperatorTestCase):
                 {
                     "title": "Sample Browser Research",
                     "source_kind": "browser_research",
-                    "content": (examples_root / "artifacts" / "browser-research.md").read_text(encoding="utf-8"),
+                    "content": (fixture_root / "artifacts" / "browser-research.md").read_text(encoding="utf-8"),
                 },
                 {
                     "title": "Sample Chat Log",
                     "source_kind": "chat_log",
-                    "content": (examples_root / "artifacts" / "chat-log.md").read_text(encoding="utf-8"),
+                    "content": (fixture_root / "artifacts" / "chat-log.md").read_text(encoding="utf-8"),
                 },
             ]
             ingest = asyncio.run(core.agent_workspace(
                 action="ingest_artifacts",
                 source_kind="sample_artifact",
-                batch_id="example-pack",
+                batch_id="fixture-pack",
                 artifacts=artifact_inputs,
             ))
             self.assertEqual(ingest["summary"]["stored"], 2)
 
             analysis = asyncio.run(core.agent_workspace(
                 action="analyze_inbox",
-                batch_id="example-pack",
+                batch_id="fixture-pack",
                 limit=20,
             ))
             self.assertGreater(analysis["summary"]["reviewable_events"], 0)
-            self.assertGreater(analysis["summary"]["quant_candidates"], 0)
+            self.assertGreater(analysis["summary"]["knowledge_candidates"], 0)
 
             review = asyncio.run(core.agent_workspace(
                 action="review_next",
-                batch_id="example-pack",
+                batch_id="fixture-pack",
                 kind="all",
                 limit=10,
             ))
@@ -675,7 +735,7 @@ class AgentWorkspaceTests(OperatorTestCase):
             self.assertNotIn("Found 12 web pages", dump)
             self.assertIn("imported text as data", dump.lower())
 
-            trace = json.loads((examples_root / "artifacts" / "agent-trace.json").read_text(encoding="utf-8"))
+            trace = json.loads((fixture_root / "artifacts" / "agent-trace.json").read_text(encoding="utf-8"))
             recorded = asyncio.run(core.agent_workspace(action="record_trace", trace=trace))
             self.assertEqual(recorded["status"], "complete")
             calibr = asyncio.run(core.agent_workspace(

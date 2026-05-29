@@ -272,7 +272,7 @@ def summarize_artifact(artifact: dict[str, Any], chunks: list[dict[str, Any]]) -
     }
 
 
-def build_quant_candidates(
+def build_knowledge_candidates(
     artifact: dict[str, Any],
     chunks: list[dict[str, Any]],
     limit: int = 3,
@@ -311,6 +311,15 @@ def build_quant_candidates(
     return candidates[: max(0, int(limit))]
 
 
+def build_quant_candidates(
+    artifact: dict[str, Any],
+    chunks: list[dict[str, Any]],
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Compatibility alias for older callers; new responses use knowledge candidates."""
+    return build_knowledge_candidates(artifact, chunks, limit=limit)
+
+
 def analyze_inbox(
     core,
     source_kind: str = "",
@@ -326,14 +335,14 @@ def analyze_inbox(
 
     records: list[dict[str, Any]] = []
     summaries: list[dict[str, Any]] = []
-    quant_candidates: list[dict[str, Any]] = []
+    knowledge_candidates: list[dict[str, Any]] = []
     chunk_total = 0
     for artifact in artifacts:
         chunks = core.storage.list_artifact_chunks(artifact["id"], limit=200)
         chunk_total += len(chunks)
         summaries.append(summarize_artifact(artifact, chunks))
         records.append(artifact_record(artifact, chunks))
-        quant_candidates.extend(build_quant_candidates(artifact, chunks, limit=3))
+        knowledge_candidates.extend(build_knowledge_candidates(artifact, chunks, limit=3))
 
     event_flow = build_event_flow_draft(records, {}, limit=safe_limit)
     artifact_types = {
@@ -364,13 +373,13 @@ def analyze_inbox(
             "chunks": chunk_total,
             "events": len(event_flow.get("events", [])),
             "reviewable_events": len(reviewable_events),
-            "quant_candidates": len(quant_candidates),
+            "knowledge_candidates": len(knowledge_candidates),
             "relation_candidates": len(relation_candidates),
         },
         "summaries": summaries,
         "events": event_flow.get("events", []),
         "reviewable_events": reviewable_events,
-        "quant_candidates": quant_candidates[:safe_limit],
+        "knowledge_candidates": knowledge_candidates[:safe_limit],
         "event_counts": event_counts.most_common(),
         "relation_candidates": relation_candidates,
         "causal_candidates": relation_candidates,
@@ -384,6 +393,7 @@ __all__ = [
     "analyze_inbox",
     "artifact_record",
     "artifact_type_for",
+    "build_knowledge_candidates",
     "build_quant_candidates",
     "review_quality",
     "summarize_artifact",

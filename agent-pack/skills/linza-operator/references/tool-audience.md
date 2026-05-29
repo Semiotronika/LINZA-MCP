@@ -5,21 +5,22 @@ The canonical map is `TOOL_AUDIENCE` in `linza_mcp/operator.py`.
 The default MCP `tools/list` is intentionally compact and is defined by
 `DEFAULT_MCP_TOOLS`. `ADVANCED_MCP_TOOLS` remain callable for compatibility and
 development, but are hidden unless the server is started with
-`LINZA_TOOL_SURFACE=advanced`.
+the separate low-level mode.
 
 ## User Entry
 
 - `guide_next_steps`
 - `agent_workspace(action="doctor")`
-- review items from `build_review_apply_queue`
-- review items from `agent_workspace(action="review_next")`
+- review intents from `agent_workspace(action="review_next")`
 
 ## Agent Facade
 
 - `agent_workspace`
 
-Use it for artifact inbox, trace review, memory search, review items, apply,
+Use it for artifact inbox, trace review, memory search, review intents, apply,
 history, soft revoke, supervised growth, and context export.
+It routes both vault `rq-*` review cards and artifact/workspace `aw-*` review
+cards through `review_next` and `apply_review_items`.
 
 ## Agent Read Tools
 

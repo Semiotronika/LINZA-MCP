@@ -16,10 +16,10 @@ WORKFLOW_STEPS = [
     },
     {
         "id": "review_roles",
-        "label": "Review material types",
+        "label": "Review material formats",
         "kind": "material_type",
         "kinds": ["material_type", "role"],
-        "why": "Material types are named first, then written as note roles only after review.",
+        "why": "Material formats are named first, then written as note roles only after review.",
     },
     {
         "id": "review_hierarchy",
@@ -31,7 +31,7 @@ WORKFLOW_STEPS = [
         "id": "review_causal_links",
         "label": "Review cause/effect links",
         "kind": "causal_link",
-        "why": "Causal links are higher-risk conclusions and should be reviewed only after domains, material types, and hierarchy have context.",
+        "why": "Causal links are higher-risk conclusions and should be reviewed only after domains, material formats, and hierarchy have context.",
     },
     {
         "id": "review_memory",
@@ -50,15 +50,15 @@ STAGE_PRESENTATION = {
         "writes": "После подтверждения в YAML появится только короткое `domains`; текст заметок не меняется.",
     },
     "review_roles": {
-        "title": "Разобрать типы материалов",
-        "question": "Какие типы материалов реально есть в этой базе, и как их назвать?",
-        "plain_next": "LINZA сначала покажет группы найденных материалов и попросит назвать тип. После этого появятся отдельные предложения на запись `role` в YAML.",
-        "writes": "Название типа сначала сохраняется в `.linza`; YAML `role: ...` появляется только отдельным подтвержденным шагом. Текст заметки не меняется.",
+        "title": "Разобрать форматы материалов",
+        "question": "Какие форматы материалов реально есть в этой базе, и как их назвать?",
+        "plain_next": "LINZA сначала покажет группы найденных материалов и попросит назвать формат. После этого появятся отдельные интенты ревью на запись `role` в YAML.",
+        "writes": "Название формата сначала сохраняется в `.linza`; YAML `role: ...` появляется только отдельным подтвержденным шагом. Текст заметки не меняется.",
     },
     "review_hierarchy": {
         "title": "Собрать мягкую иерархию",
         "question": "Какие заметки центральные, а какие относятся к ним?",
-        "plain_next": "LINZA предложит главные заметки внутри областей. Ты подтверждаешь только те связи, которые совпадают с твоей картой.",
+        "plain_next": "LINZA покажет интенты для главных заметок внутри областей. Ты подтверждаешь только те связи, которые совпадают с твоей картой.",
         "writes": "Подтвержденная иерархия сохраняется в `.linza`, а не вписывается в Markdown.",
     },
     "review_causal_links": {
@@ -70,7 +70,7 @@ STAGE_PRESENTATION = {
     "review_memory": {
         "title": "Выбрать память для будущих агентов",
         "question": "Что стоит помнить между сессиями как устойчивый контекст?",
-        "plain_next": "LINZA предложит короткие фрагменты памяти. Ты можешь принять, переформулировать или пропустить.",
+        "plain_next": "LINZA покажет короткие интенты памяти. Ты можешь принять, переформулировать или пропустить.",
         "writes": "Память сохраняется в `.linza`; исходные заметки не меняются.",
     },
     "maintenance": {
@@ -90,10 +90,10 @@ STAGE_PRESENTATION_EN = {
         "writes": "After approval, LINZA may write only compact `domains` YAML. Note bodies are not changed.",
     },
     "review_roles": {
-        "title": "Review material types",
+        "title": "Review material formats",
         "question": "What kinds of material are actually present here, and how should they be named?",
-        "plain_next": "LINZA first shows discovered material groups and asks for a user-provided name. Only after that does it create separate review items for writing `role` into YAML.",
-        "writes": "The material-type name is stored in `.linza` first. Visible YAML `role: ...` appears only through a separate approved item. Note bodies are not changed.",
+        "plain_next": "LINZA first shows discovered material groups and asks for a user-provided format name. Only after that does it create separate review intents for writing `role` into YAML.",
+        "writes": "The material-format name is stored in `.linza` first. Visible YAML `role: ...` appears only through a separate approved item. Note bodies are not changed.",
     },
     "review_hierarchy": {
         "title": "Build a soft hierarchy",
@@ -125,13 +125,13 @@ STAGE_PRESENTATION_EN = {
 HOW_TO_ANSWER = {
     "ru": [
         "принять пункт",
-        "попросить заменить название или тип материала",
+        "попросить заменить название или формат материала",
         "пропустить пункт",
         "попросить показать доказательства",
     ],
     "en": [
         "accept the item",
-        "ask to rename the area or material type",
+        "ask to rename the area or material format",
         "skip the item",
         "ask to show the evidence",
     ],
@@ -246,19 +246,19 @@ TOOL_GUIDE = {
     },
     "draft_vault_map": {
         "when": "First meaningful map of a raw vault.",
-        "does": "Builds domains, material types, hierarchy candidates, event flow, lenses, and memory candidates.",
+        "does": "Builds domains, material formats, hierarchy candidates, event flow, lenses, and memory candidates.",
         "default_mode": "read_only",
         "write_scope": "none",
     },
     "guide_next_steps": {
         "when": "After first scan, after domains, and whenever the user asks what to do next.",
-        "does": "Explains current onboarding stage, pending review items, safe next tools, and tool purposes.",
+        "does": "Explains current onboarding stage and points the agent to the next safe agent_workspace action.",
         "default_mode": "read_only",
         "write_scope": "none",
     },
     "agent_workspace": {
         "when": "Default facade for workspace maps, teaching, supervised growth, artifact inbox, trace review, graph connect, memory search, and context export.",
-        "does": "Routes typed actions such as map, teach, grow, ingest_artifacts, analyze_inbox, review_next, apply_review_items, connect, search_memory, export_context, calibr, and doctor.",
+        "does": "Routes typed actions such as map, teach, grow, ingest_artifacts, analyze_inbox, review_next, apply_review_items, connect, search_memory, export_context, calibr, and doctor. review_next/apply_review_items also handle vault rq-* review intents.",
         "default_mode": "mixed; read-only actions stay read-only and apply actions dry-run by default",
         "write_scope": ".linza sidecar for raw artifacts, traces, chunks, approved items, and audit events",
     },
@@ -276,7 +276,7 @@ TOOL_GUIDE = {
     },
     "suggest_properties": {
         "when": "Before patching one note's compact LINZA YAML.",
-        "does": "Suggests material type, state, and properties with a YAML preview.",
+        "does": "Suggests material format, state, and properties with a YAML preview.",
         "default_mode": "read_only",
         "write_scope": "none",
     },
@@ -287,20 +287,20 @@ TOOL_GUIDE = {
         "write_scope": "frontmatter YAML only; never note body",
     },
     "approve_draft_item": {
-        "when": "When applying exactly one reviewed material-type, domain, hierarchy, causal, or memory item.",
+        "when": "When applying exactly one reviewed material-format, domain, hierarchy, causal, or memory item.",
         "does": "Applies one draft item or records it in sidecar.",
         "default_mode": "dry_run",
-        "write_scope": "material types/domains write compact YAML; hierarchy/causal/memory write sidecar",
+        "write_scope": "material formats/domains write compact YAML; hierarchy/causal/memory write sidecar",
     },
     "approve_review_queue_items": {
         "when": "When applying a small set of reviewed stable rq-* IDs.",
         "does": "Rebuilds the queue, matches exact IDs, previews by default, and applies only matched items.",
         "default_mode": "dry_run",
-        "write_scope": "material-type/domain YAML or sidecar approvals depending on review kind",
+        "write_scope": "material-format/domain YAML or sidecar approvals depending on review kind",
     },
     "apply_learned_review_queue": {
-        "when": "After accepted examples exist and the user wants assisted/autopilot suggestions.",
-        "does": "Selects review items supported by accepted examples; preview by default.",
+        "when": "After accepted examples exist and the user wants assisted review intents.",
+        "does": "Selects review intents supported by accepted examples; preview by default.",
         "default_mode": "dry_run",
         "write_scope": "same as approve_review_queue_items only when dry_run=false",
     },
@@ -335,8 +335,8 @@ TOOL_GUIDE = {
         "write_scope": ".linza/reports by default when write=true",
     },
     "build_review_apply_queue": {
-        "when": "Main review tool after draft_vault_map; use by kind: domains, then material types, hierarchy, causal, memory.",
-        "does": "Builds stable rq-* review items with dry-run approval payloads.",
+        "when": "Main review tool after draft_vault_map; use by kind: domains, then material formats, hierarchy, causal, memory.",
+        "does": "Builds stable rq-* review intents with dry-run approval payloads.",
         "default_mode": "read_only unless write=true",
         "write_scope": ".linza/reports by default when write=true; source notes unchanged",
     },
@@ -359,7 +359,7 @@ TOOL_GUIDE = {
         "write_scope": "none",
     },
     "explain_node": {
-        "when": "When inspecting one note's material type, graph context, bridges, and review suggestions.",
+        "when": "When inspecting one note's material format, graph context, bridges, and review suggestions.",
         "does": "Explains a single node.",
         "default_mode": "read_only",
         "write_scope": "none",
@@ -553,7 +553,7 @@ def _next_step(stage_id: str, pending: dict[str, int], max_notes: int, max_domai
             "id": "maintenance",
             "label": "Maintain the map",
             "label_human": presentation["title"],
-            "why": "No immediate review items are pending in the current guide window.",
+            "why": "No immediate review intents are pending in the current guide window.",
             "primary_tool": "guide_next_steps",
             "approval_tool": None,
             "suggested_action": "Re-run guide_next_steps after adding or changing notes.",
@@ -570,23 +570,25 @@ def _next_step(stage_id: str, pending: dict[str, int], max_notes: int, max_domai
         "plain_next": presentation.get("plain_next", ""),
         "write_preview": presentation.get("writes", ""),
         "pending": sum(pending.get(kind, 0) for kind in step.get("kinds", [step["kind"]])),
-        "primary_tool": "build_review_apply_queue",
+        "primary_tool": "agent_workspace",
         "primary_arguments": {
+            "action": "review_next",
+            "kind": step["kind"],
             "max_notes": max_notes,
             "max_domains": max_domains,
-            "limit": limit,
+            "limit": min(5, limit),
             "include_memory": include_memory,
-            "redact": False,
         },
         "review_filter": {"kind": step["kind"], "kinds": step.get("kinds", [step["kind"]]), "suggested_batch_size": 5},
-        "approval_tool": "approve_review_queue_items",
+        "approval_tool": "agent_workspace",
         "approval_arguments": {
+            "action": "apply_review_items",
             "item_ids": ["rq-..."],
             "dry_run": True,
             "allow_overwrite": False,
             "include_memory": include_memory,
         },
-        "suggested_action": f"Show up to 5 {step['kind']} review items, ask the user to accept/skip/change, then dry-run exact IDs before applying.",
+        "suggested_action": f"Call agent_workspace(action=\"review_next\", kind=\"{step['kind']}\", limit=5), ask the user to accept/skip/change, then call agent_workspace(action=\"apply_review_items\", item_ids=[...], dry_run=true) before applying.",
         "writes": TOOL_GUIDE["approve_review_queue_items"]["write_scope"],
     }
 
@@ -604,6 +606,7 @@ def _user_view(stage_id: str, approved: dict[str, int], pending: dict[str, int],
         "progress": {
             "accepted_domains": approved.get("domain", 0),
             "accepted_roles": approved.get("role", 0),
+            "accepted_material_formats": approved.get("material_type", 0),
             "accepted_material_types": approved.get("material_type", 0),
             "pending_now": sum(
                 pending.get(kind, 0)
@@ -624,8 +627,8 @@ def _user_view(stage_id: str, approved: dict[str, int], pending: dict[str, int],
             for card in recommended_cards
         ],
         "technical": {
-            "read_cards_tool": "build_review_apply_queue",
-            "apply_cards_tool": "approve_review_queue_items",
+            "read_cards_tool": "agent_workspace(action=\"review_next\")",
+            "apply_cards_tool": "agent_workspace(action=\"apply_review_items\")",
         },
     }
 
@@ -672,7 +675,7 @@ async def guide_next_steps(
             "label": "Maintain the map",
             "label_human": _presentation("maintenance", resolved_language)["title"],
             "kind": "maintenance",
-            "why": "No immediate review items are pending in the current guide window.",
+            "why": "No immediate review intents are pending in the current guide window.",
             "question_human": _presentation("maintenance", resolved_language)["question"],
         },
     )
@@ -736,8 +739,8 @@ async def guide_next_steps(
         } if include_tool_guide else {},
         "policies": [
             "This guide is read-only.",
-            "Review order is domains -> material types -> hierarchy -> causal links -> memory.",
-            "Material-type/domain items may write compact YAML only after approval; hierarchy, causal, and memory approvals live in .linza sidecar.",
+            "Review order is domains -> material formats -> hierarchy -> causal links -> memory.",
+            "Material-format/domain items may write compact YAML only after approval; hierarchy, causal, and memory approvals live in .linza sidecar.",
             "Causal links are never silently created during normal indexing.",
             "Visible Markdown reports are opt-in; default report writes go to .linza.",
         ],

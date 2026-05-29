@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.2.0 - 2026-05-29
+
+### Changed
+
+- Refined the public MCP surface around 7 default tools and the
+  `agent_workspace` facade, with the low-level tool set kept as a development
+  surface instead of a normal user workflow.
+- Standardized the public material-classification language on "material
+  formats" while preserving internal compatibility keys such as
+  `material_type`, `type_name`, and `role`.
+- Standardized the public review language on "review intents" and added clearer
+  review cards for `rq-*` vault cards and `aw-*` artifact/workspace cards.
+- Updated `guide_next_steps` and operator documentation so agents route normal
+  work through `agent_workspace` modes instead of exposing raw low-level tools.
+
+### Added
+
+- `agent_workspace(action="review_next")` now presents readable card fields for
+  decision, question, evidence, related notes, write effect, and dry-run/apply
+  arguments.
+- `agent_workspace(action="apply_review_items")` can apply both vault `rq-*`
+  cards and artifact/workspace `aw-*` cards with dry-run as the default.
+- Public README files now explain the safety model, material formats, review
+  intents, supervised teaching/growth, artifact boundaries, and the 7-tool
+  default surface in Russian and English.
+
+### Documentation
+
+- Moved the previous public sample material into
+  `tests/fixtures/linza-sample-pack` as an internal regression fixture and
+  removed the sample-pack presentation from the public README.
+- Removed the advanced-surface environment switch from public README/server
+  configuration examples; the low-level surface remains documented only as a
+  maintainer/debugging path.
+
 ## 0.1.9 - 2026-05-29
 
 ### Documentation
@@ -10,7 +45,7 @@
   `./vault` startup default, and documented that embedding settings are only
   needed for semantic indexing/search.
 - Removed the standalone contributing guide to keep the public package surface
-  focused on README, SECURITY, tool docs, examples, and tests.
+  focused on README, SECURITY, tool docs, and tests.
 
 ## 0.1.8 - 2026-05-29
 
@@ -48,7 +83,7 @@ User-facing review and release cleanup.
 - `agent_workspace(action="revoke_approval")` and storage-level soft revoke, so
   an approved item can be removed from active learning without deleting its
   audit trail.
-- User display lines for review items, making agent output easier to show
+- User display lines for review intents, making agent output easier to show
   without dumping raw JSON.
 
 ### Changed
@@ -61,7 +96,7 @@ User-facing review and release cleanup.
 
 ### Documentation
 
-- Reworked Russian and English README wording around review items, local
+- Reworked Russian and English README wording around review intents, local
   history, and safe apply/revoke flow.
 
 ## 0.1.4 - 2026-05-20
@@ -129,10 +164,10 @@ Initial public preparation of LINZA.
 - Compact default MCP surface with `agent_workspace` as the main facade.
 - Artifact ingest for pasted text, Markdown, TXT, JSON, DOCX, XLSX, and optional
   PDF extraction.
-- Staged review cards for domains, material types, hierarchy, causal links,
+- Staged review cards for domains, material formats, hierarchy, causal links,
   memory, patterns, and calibr traces.
 - Supervised growth mode that stays dry-run by default.
-- Synthetic private-safe example pack and regression tests.
+- Internal regression fixture and tests for the LINZA workflow.
 - PyPI packaging metadata, official MCP Registry `server.json`, and Glama
   ownership metadata.
 - Optional Dockerfile for isolated stdio runs.

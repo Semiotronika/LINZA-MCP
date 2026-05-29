@@ -152,7 +152,7 @@ def build_action_suggestions(
 
 
 def scan_vault(core) -> Dict[str, Any]:
-    """Read the vault as a note system: links, tags, properties, material types, and cleanup signals."""
+    """Read the vault as a note system: links, tags, properties, material formats, and cleanup signals."""
     vault = core.storage.vault_path
     notes: Dict[str, Dict[str, Any]] = {}
     title_to_paths: Dict[str, list[str]] = defaultdict(list)
@@ -343,7 +343,7 @@ def build_diagnostic_markdown(core) -> str:
     lines = [
         "# LINZA Vault Diagnostic",
         "",
-        "LINZA reads the vault as a working knowledge system: files, links, properties, material types, and semantic candidates.",
+        "LINZA reads the vault as a working knowledge system: files, links, properties, material formats, and semantic candidates.",
         "",
         "## Snapshot",
         "",
@@ -365,7 +365,7 @@ def build_diagnostic_markdown(core) -> str:
             lines.append(f"- **{key}**: {value}")
     else:
         lines.append(calibration.get("message", "Embeddings are not calibrated yet."))
-    lines.extend(["", "## Material Type Counts", ""])
+    lines.extend(["", "## Material Format Counts", ""])
     for role, count in diagnostic.get("roles", []):
         lines.append(f"- **{role}**: {count}")
     lines.extend(["", "## First Actions", ""])
@@ -487,7 +487,7 @@ def build_bases_plan_markdown(core) -> str:
         "| Domain candidates | discovered from semantic clusters | domains, file.links |",
         "| Review queue | generated from draft map | evidence, confidence, next action |",
         "",
-        "## Current Material Type Counts",
+        "## Current Material Format Counts",
         "",
     ]
     for role, count in diagnostic.get("roles", []):
@@ -544,7 +544,7 @@ def suggest_properties_for_note(core, path: str) -> Dict[str, Any]:
         suggestions.append({
             "property": "confidence",
             "value": confidence,
-            "why": "Machine confidence for the suggested material type.",
+            "why": "Machine confidence for the suggested material format.",
         })
     yaml_patch = build_linza_block(proposed_linza) if proposed_linza else {}
 
@@ -561,7 +561,7 @@ def suggest_properties_for_note(core, path: str) -> Dict[str, Any]:
         "yaml_patch": yaml_patch,
         "yaml_preview": format_yaml_block(yaml_patch) if yaml_patch else "",
         "yaml_schema": {
-            "role": "accepted user material type name discovered and named for this vault",
+            "role": "accepted user material format name discovered and named for this vault",
             "confidence": "optional confidence for machine suggestions",
             "domains": "reviewed domain labels",
         },
@@ -585,7 +585,7 @@ def build_yaml_suggestions_markdown(core, limit: int = 50) -> str:
         "",
         "These are proposed user-facing YAML properties. This report does not modify notes.",
         "",
-        "LINZA YAML stores only compact reviewed material type/domain hints; processing state, temporary link candidates, and embedding scores stay in reports or `.linza/linza.db`.",
+        "LINZA YAML stores only compact reviewed material format/domain hints; processing state, temporary link candidates, and embedding scores stay in reports or `.linza/linza.db`.",
         "",
     ]
     if not paths:

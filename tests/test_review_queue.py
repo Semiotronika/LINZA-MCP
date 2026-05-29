@@ -319,7 +319,7 @@ class ReviewQueueTests(OperatorTestCase):
             self.assertIn("human_message", result)
             self.assertTrue(all(item.get("display", {}).get("lines") for item in result["items"]))
             self.assertTrue(any(
-                line.startswith("Предложение:")
+                line.startswith("Интент ревью:")
                 for line in result["items"][0]["display"]["lines"]
             ))
             self.assertTrue(any(
@@ -336,6 +336,8 @@ class ReviewQueueTests(OperatorTestCase):
             self.assertIn("type_id", type_item["approval"]["arguments"])
             self.assertNotIn("type_name", type_item["approval"]["arguments"])
             self.assertIn("Как назвать", type_item["human"]["question"])
+            self.assertIn("формат", type_item["human"]["question"])
+            self.assertIn("формат", type_item["human"]["label"])
             self.assertNotIn("role", item_types)
             for note_path in vault.glob("Product/*.md"):
                 metadata, _ = strip_frontmatter(note_path.read_text(encoding="utf-8"))

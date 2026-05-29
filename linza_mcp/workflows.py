@@ -37,8 +37,21 @@ SUPPORTED_AGENT_WORKSPACE_ACTIONS = [
 
 SOURCE_INDEX_ACTIONS = {"map", "teach", "grow", "connect"}
 TEACHABLE_REVIEW_KINDS = ("domain", "material_type", "hierarchy_link", "causal_link", "memory_item")
+VAULT_REVIEW_KINDS = frozenset((*TEACHABLE_REVIEW_KINDS, "role", "all"))
 TEACH_KIND_ORDER = {kind: index for index, kind in enumerate(TEACHABLE_REVIEW_KINDS)}
 TEACH_PRIORITY_SCORE = {"high": 3, "medium": 2, "low": 1}
+REVIEW_KIND_LABELS = {
+    "domain": "область",
+    "material_type": "формат материала",
+    "role": "формат заметки",
+    "hierarchy_link": "иерархия",
+    "causal_link": "причинная связь",
+    "memory_item": "память",
+    "memory_candidate": "память",
+    "knowledge_candidate": "фрагмент знания",
+    "quant_candidate": "фрагмент знания",
+    "calibr_card": "урок calibr",
+}
 
 
 def _safe_limit(limit: int) -> int:
@@ -59,6 +72,381 @@ def _safe_optional_int(value: Any) -> int | None:
     except Exception:
         return None
     return parsed if parsed > 0 else None
+
+
+def _review_queue_stage(kind: str) -> str:
+    normalized = str(kind or "all").strip().lower()
+    if normalized == "domain":
+        return "domains"
+    if normalized in {"material_type", "role"}:
+        return "material_types"
+    if normalized == "hierarchy_link":
+        return "hierarchy"
+    if normalized == "causal_link":
+        return "events"
+    if normalized == "memory_item":
+        return "memory"
+    return "all"
+
+
+def _use_vault_review_queue(core, kind: str, source_kind: str, batch_id: str, trace_id: str) -> bool:
+    normalized = str(kind or "all").strip().lower() or "all"
+    if (
+        normalized not in VAULT_REVIEW_KINDS
+        or str(source_kind or "").strip()
+        or str(batch_id or "").strip()
+        or str(trace_id or "").strip()
+    ):
+        return False
+    if normalized == "all":
+        return int(core.storage.get_file_count()) > 0
+    return True
+
+
+def _matches_vault_review_kind(item: dict[str, Any], kind: str) -> bool:
+    normalized = str(kind or "all").strip().lower() or "all"
+    item_kind = str(item.get("kind") or "").strip().lower()
+    if normalized == "all":
+        return True
+    if normalized == "material_type":
+        return item_kind in {"material_type", "role"}
+    return item_kind == normalized
+
+
+def _approval_arguments(item: dict[str, Any]) -> dict[str, Any]:
+    approval = item.get("approval") if isinstance(item.get("approval"), dict) else {}
+    arguments = approval.get("arguments") if isinstance(approval.get("arguments"), dict) else {}
+    return arguments
+
+
+def _review_item_paths(item: dict[str, Any]) -> list[str]:
+    arguments = _approval_arguments(item)
+    ordered: list[str] = []
+
+    def add(value: Any) -> None:
+        if isinstance(value, (list, tuple)):
+            for entry in value:
+                add(entry)
+            return
+        text = str(value or "").strip()
+        if text and text not in ordered:
+            ordered.append(text)
+
+    add(item.get("paths", []))
+    for key in ("paths", "child_paths", "path", "parent_path", "source_path", "target_path"):
+        add(arguments.get(key))
+    return ordered
+
+
+def _review_effect(item: dict[str, Any]) -> str:
+    human = item.get("human") if isinstance(item.get("human"), dict) else {}
+    effect = str(human.get("write_preview") or human.get("effect") or "").strip()
+    if effect:
+        return effect
+    kind = str(item.get("kind") or "")
+    if kind == "domain":
+        return "После подтверждения LINZA добавит короткую YAML-пометку domains; текст заметок не меняется."
+    if kind in {"hierarchy_link", "causal_link", "memory_item", "material_type", "memory_candidate", "knowledge_candidate", "quant_candidate", "calibr_card"}:
+        return "После подтверждения LINZA сохранит решение в .linza sidecar; исходные заметки не меняются."
+    if kind == "role":
+        return "После подтверждения LINZA может добавить короткую YAML-пометку формата; текст заметки не меняется."
+    return "Перед любой записью LINZA сначала показывает dry-run preview."
+
+
+def _readable_review_text(value: Any, limit: int = 260) -> str:
+    raw = str(value or "").strip()
+    if "terms=" in raw and "shape=" in raw:
+        terms = raw.split("terms=", 1)[1].split(";", 1)[0].strip()
+        note_count = ""
+        if "notes=" in raw:
+            note_count = raw.split("notes=", 1)[1].split(";", 1)[0].strip()
+        summary = f"Повторяются термины: {terms}. Похожа структура заметок."
+        if note_count:
+            summary += f" Размер кластера: {note_count}."
+        return preview_text(summary, limit)
+
+    text = preview_text(raw, limit)
+    replacements = {
+        "Accept this draft domain for the representative notes if the name and grouping are right.": (
+            "Проверьте, что название области и группа заметок действительно подходят."
+        ),
+        "Grouped from structural fingerprints observed in this vault; label is a draft, not a built-in ontology.": (
+            "LINZA сгруппировала похожие по структуре заметки; название формата пока черновое."
+        ),
+        "LINZA found a central note candidate for this draft domain. Accept only if this parent-child grouping matches the user's map.": (
+            "LINZA нашла возможную главную заметку для области; принимать стоит только если эта иерархия совпадает с вашей картой."
+        ),
+        "Events share a draft domain and appear in a compatible order across notes; user review is required before treating this as causal.": (
+            "События находятся в близкой области и идут в совместимом порядке; причинность обязательно нужно проверить."
+        ),
+        "Event-flow evidence can become durable memory after review.": (
+            "Фрагмент из событийного потока может стать долговременной памятью после проверки."
+        ),
+        "Central note candidate: links, role, title, and readable size.": (
+            "Кандидат на главную заметку: учтены ссылки, роль, заголовок и размер."
+        ),
+        "terms=": "термины: ",
+        "shape=": "структура: ",
+        "notes=": "заметок: ",
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    return text
+
+
+def _review_question(item: dict[str, Any]) -> str:
+    human = item.get("human") if isinstance(item.get("human"), dict) else {}
+    question = str(human.get("question") or "").strip()
+    if question:
+        return question
+    kind = str(item.get("kind") or "")
+    if kind == "domain":
+        return "Эти заметки действительно относятся к одной рабочей области?"
+    if kind == "material_type":
+        return "Это полезный повторяющийся формат материала для этой базы?"
+    if kind == "hierarchy_link":
+        return "Эта заметка действительно должна быть родительской для остальных?"
+    if kind == "causal_link":
+        return "Между этими заметками действительно есть причинная или влияющая связь?"
+    if kind in {"memory_item", "memory_candidate"}:
+        return "Это стоит запомнить как долговременный контекст для будущих сессий?"
+    if kind in {"knowledge_candidate", "quant_candidate"}:
+        return "Это стоит сохранить как отдельный проверенный фрагмент знания?"
+    return "Этот пункт стоит принять?"
+
+
+def _review_evidence_summary(item: dict[str, Any]) -> str:
+    evidence = str(item.get("evidence") or "").strip()
+    if evidence:
+        return _readable_review_text(evidence, 260)
+    trace = item.get("evidence_trace") if isinstance(item.get("evidence_trace"), list) else []
+    parts = []
+    for entry in trace[:4]:
+        if not isinstance(entry, dict):
+            continue
+        label = str(entry.get("label") or "").strip()
+        value = str(entry.get("value") or "").strip()
+        if label and value:
+            parts.append(f"{label}: {_readable_review_text(value, 80)}")
+        elif label:
+            parts.append(label)
+    if parts:
+        return "; ".join(parts)
+    why = str(item.get("why") or "").strip()
+    return _readable_review_text(why, 260) if why else "LINZA нашла локальные признаки, но пункт нужно проверить вручную."
+
+
+def _review_decision(item: dict[str, Any]) -> str:
+    kind = str(item.get("kind") or "")
+    title = str(item.get("title") or "").strip()
+    arguments = _approval_arguments(item)
+    paths = _review_item_paths(item)
+
+    if kind == "domain":
+        domain_name = str(arguments.get("domain_name") or title.replace("Область:", "").strip() or "новая область")
+        return f"Принять область «{domain_name}» для {len(paths)} заметок."
+    if kind == "material_type":
+        type_id = str(arguments.get("type_name") or arguments.get("type_id") or title).strip()
+        return f"Принять формат материала «{type_id}» по {len(paths)} примерам."
+    if kind == "role":
+        role = str(arguments.get("role") or title or "формат заметки").strip()
+        path = str(arguments.get("path") or (paths[0] if paths else "")).strip()
+        return f"Принять формат «{role}» для {path or 'заметки'}."
+    if kind == "hierarchy_link":
+        parent = str(arguments.get("parent_path") or (paths[0] if paths else "")).strip()
+        child_count = len(arguments.get("child_paths", []) or [])
+        return f"Считать «{parent or 'эту заметку'}» родительской для {child_count} заметок."
+    if kind == "causal_link":
+        source = str(arguments.get("source_path") or (paths[0] if paths else "")).strip()
+        target = str(arguments.get("target_path") or (paths[1] if len(paths) > 1 else "")).strip()
+        relation = str(arguments.get("relation") or "related_to").strip()
+        return f"Принять связь: «{source}» -> «{target}» ({relation})."
+    if kind in {"memory_item", "memory_candidate"}:
+        memory_type = str(arguments.get("memory_type") or "memory").strip()
+        return f"Запомнить как {memory_type}: {title.replace('Память:', '').strip() or 'кандидат памяти'}."
+    if kind in {"knowledge_candidate", "quant_candidate"}:
+        return f"Сохранить фрагмент знания: {title or 'кандидат знания'}."
+    return title or f"Проверить пункт {kind or 'review'}."
+
+
+def _review_user_cards(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    cards: list[dict[str, Any]] = []
+    for index, item in enumerate(items, start=1):
+        review_id = str(item.get("id") or "").strip()
+        kind = str(item.get("kind") or "review").strip()
+        kind_label = REVIEW_KIND_LABELS.get(kind, kind.replace("_", " "))
+        priority = str(item.get("priority") or "medium").strip()
+        paths = _review_item_paths(item)
+        decision = _review_decision(item)
+        question = _review_question(item)
+        evidence = _review_evidence_summary(item)
+        effect = _review_effect(item)
+        card = {
+            "number": index,
+            "review_id": review_id,
+            "kind": kind,
+            "kind_label": kind_label,
+            "priority": priority,
+            "intent": decision,
+            "intent_kind": kind,
+            "intent_status": "review_required",
+            "proposal": str(item.get("title") or decision).strip(),
+            "decision": decision,
+            "question": question,
+            "why": _readable_review_text(item.get("why"), 320),
+            "evidence": evidence,
+            "related_notes": paths[:8],
+            "related_note_count": len(paths),
+            "effect": effect,
+            "dry_run_arguments": {
+                "action": "apply_review_items",
+                "item_ids": [review_id] if review_id else [],
+                "dry_run": True,
+            },
+            "apply_arguments": {
+                "action": "apply_review_items",
+                "item_ids": [review_id] if review_id else [],
+                "dry_run": False,
+            },
+        }
+        card["lines"] = [
+            f"{index}. {decision}",
+            f"   Категория: {kind_label}; приоритет: {priority}; ID: {review_id}",
+            f"   Проверить: {question}",
+            f"   Почему: {evidence}",
+            f"   Изменение: {effect}",
+        ]
+        if paths:
+            shown = ", ".join(paths[:3])
+            suffix = f" (+{len(paths) - 3})" if len(paths) > 3 else ""
+            card["lines"].insert(2, f"   Относится к: {shown}{suffix}")
+        card["text"] = "\n".join(card["lines"])
+        cards.append(card)
+    return cards
+
+
+def _review_human_view(cards: list[dict[str, Any]], kind: str, queue_items: int | None = None) -> dict[str, Any]:
+    total = queue_items if queue_items is not None else len(cards)
+    return {
+        "title": "Карточки ревью LINZA",
+        "summary": (
+            f"Показано {len(cards)} из {total} интентов ревью. "
+            "ID нужен только для точного dry-run/apply; читать лучше карточки по номерам."
+        ),
+        "kind": kind or "all",
+        "cards": cards,
+        "next_steps": [
+            "Сначала прочитайте decision, related_notes и question.",
+            "Если интент выглядит верно, назовите его номер или review_id для dry-run preview.",
+            "Применяйте только маленькую партию проверенных карточек.",
+            "Пропускайте или переименовывайте карточки, где название области/формата звучит не как ваша карта.",
+        ],
+        "safety": [
+            "review_next ничего не записывает",
+            "dry_run включен по умолчанию",
+            "исходный текст заметок не меняется",
+        ],
+    }
+
+
+def _attach_review_view(response: dict[str, Any], kind: str, queue_items: int | None = None) -> dict[str, Any]:
+    items = response.get("items", []) if isinstance(response.get("items"), list) else []
+    cards = _review_user_cards(items)
+    response["review_cards"] = cards
+    response.setdefault("human_view", _review_human_view(cards, kind, queue_items))
+    return response
+
+
+async def _vault_review_next(
+    core,
+    kind: str,
+    limit: int,
+    max_notes: Any,
+    max_domains: Any,
+    include_memory: bool,
+) -> dict[str, Any]:
+    safe_limit = _safe_limit(limit)
+    queue = await core.build_review_apply_queue(
+        max_notes=_safe_positive_int(max_notes, 120, 1000),
+        max_domains=_safe_positive_int(max_domains, 8, 50),
+        limit=max(safe_limit, 20),
+        include_memory=include_memory,
+        analysis_stage=_review_queue_stage(kind),
+    )
+    items = [
+        item for item in queue.get("items", [])
+        if _matches_vault_review_kind(item, kind)
+    ][:safe_limit]
+    response = {
+        "tool": "agent_workspace",
+        "action": "review_next",
+        "review_surface": "vault",
+        "read_only": True,
+        "requires_review": True,
+        "items": items,
+        "human_message": (
+            f"LINZA found {len(items)} vault review card(s). Accept only exact IDs you reviewed."
+            if items else
+            "No vault review cards matched this request."
+        ),
+        "summary": {
+            "items": len(items),
+            "kind": kind or "all",
+            "queue_items": queue.get("summary", {}).get("items", len(queue.get("items", []))),
+        },
+        "policy": [
+            "review_next is read-only",
+            "vault review cards use rq-* IDs",
+            "apply rq-* IDs with agent_workspace(action=\"apply_review_items\")",
+            "dry_run is the default before any YAML or sidecar approval",
+        ],
+    }
+    return _attach_review_view(
+        response,
+        kind,
+        queue.get("summary", {}).get("items", len(queue.get("items", []))),
+    )
+
+
+async def _apply_vault_review_items(
+    core,
+    item_ids: list[str],
+    dry_run: bool,
+    max_notes: Any,
+    max_domains: Any,
+    limit: int,
+    allow_overwrite: bool,
+    include_memory: bool,
+) -> dict[str, Any]:
+    result = await core.approve_review_queue_items(
+        item_ids=item_ids,
+        max_notes=_safe_positive_int(max_notes, 120, 1000),
+        max_domains=_safe_positive_int(max_domains, 8, 50),
+        limit=max(_safe_limit(limit), len(item_ids), 40),
+        dry_run=dry_run,
+        allow_overwrite=allow_overwrite,
+        include_memory=include_memory,
+    )
+    for path in result.get("written_paths", []):
+        if path:
+            await core.index_single_file(path)
+    return {
+        "tool": "agent_workspace",
+        "action": "apply_review_items",
+        "review_surface": "vault",
+        "status": result.get("status", "unknown"),
+        "dry_run": dry_run,
+        "read_only": bool(dry_run),
+        "items": result.get("results", []),
+        "summary": result.get("summary", {}),
+        "written_paths": result.get("written_paths", []),
+        "approval_result": result,
+        "policy": [
+            "rq-* IDs come from agent_workspace(action=\"review_next\") or guide_next_steps",
+            "source note bodies are not rewritten",
+            "visible YAML writes happen only when dry_run=false and the selected item kind supports YAML",
+        ],
+    }
 
 
 def _teach_item_score(item: dict[str, Any]) -> tuple[int, int, int, int]:
@@ -97,7 +485,7 @@ def _teach_item_lessons(item: dict[str, Any]) -> list[str]:
             "what should become durable agent memory",
             f"memory type: {arguments.get('memory_type', '')}",
         ]
-    return ["how to judge a review item"]
+    return ["how to judge a review intent"]
 
 
 def _teach_card(item: dict[str, Any]) -> dict[str, Any]:
@@ -362,7 +750,7 @@ def doctor(core) -> dict[str, Any]:
             "review_gate",
             "Review gate",
             "ok",
-            "Derived memory, relations, domains, and material types stay behind review/apply gates.",
+            "Derived memory, relations, domains, and material formats stay behind review/apply gates.",
         ),
         _doctor_check(
             "calibr_lens",
@@ -652,7 +1040,7 @@ def _human_map_sections(workspace_map: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         {
             "title": "Main areas",
-            "summary": f"{len(domains)} draft areas found; names are suggestions until reviewed.",
+            "summary": f"{len(domains)} draft areas found; names are review intents until accepted or renamed.",
             "items": [item.get("name", "") for item in domains[:5] if item.get("name")],
         },
         {
@@ -786,7 +1174,7 @@ async def workspace_map(
                 },
                 {
                     "action": "review_next",
-                    "when": "The map shows useful pending review items.",
+                    "when": "The map shows useful pending review intents.",
                     "arguments": {"kind": "all", "limit": min(10, safe_limit)},
                 },
                 {
@@ -799,7 +1187,7 @@ async def workspace_map(
         "workspace_map": workspace_map_data,
         "policy": [
             "map is read-only",
-            "draft areas and material types are not accepted metadata",
+            "draft areas and material formats are not accepted metadata",
             "approved links and memories come only from sidecar approvals",
             "source note bodies stay unchanged",
         ],
@@ -819,10 +1207,10 @@ def _growth_human_view(growth: dict[str, Any]) -> dict[str, Any]:
         summary = "LINZA нужны несколько принятых пунктов, прежде чем она сможет продолжать по похожим примерам."
     elif status == "preview":
         title = "Предпросмотр роста"
-        summary = f"LINZA нашла предложения, похожие на уже принятые примеры: {len(selected_ids)}."
+        summary = f"LINZA нашла интенты ревью, похожие на уже принятые примеры: {len(selected_ids)}."
     elif status == "applied":
         title = "Рост применен"
-        summary = f"LINZA применила предложения по принятым примерам: {len(selected_ids)}. Тела заметок сохранены."
+        summary = f"LINZA применила интенты ревью по принятым примерам: {len(selected_ids)}. Тела заметок сохранены."
     else:
         title = "Рост по примерам"
         summary = "LINZA проверила принятые примеры и не нашла безопасной партии для применения."
@@ -836,16 +1224,16 @@ def _growth_human_view(growth: dict[str, Any]) -> dict[str, Any]:
                 "items": [f"{key}: {value}" for key, value in sorted(counts.items())],
             },
             {
-                "title": "Выбранные предложения",
-                "summary": f"Предложений выбрано по принятым примерам: {len(selected_ids)}.",
+                "title": "Выбранные интенты",
+                "summary": f"Интентов выбрано по принятым примерам: {len(selected_ids)}.",
                 "items": [
                     f"{item.get('id', '')}: {', '.join(item.get('reasons', [])[:3])}"
                     for item in selected_rules[:10]
                 ] or selected_ids[:10],
             },
             {
-                "title": "Пропущенные предложения",
-                "summary": f"Предложений удержано проверками качества или безопасности: {len(skipped_rules)}.",
+                "title": "Пропущенные интенты",
+                "summary": f"Интентов удержано проверками качества или безопасности: {len(skipped_rules)}.",
                 "items": [
                     f"{item.get('id', '')}: {', '.join(item.get('reasons', [])[:3])}"
                     for item in skipped_rules[:10]
@@ -853,7 +1241,7 @@ def _growth_human_view(growth: dict[str, Any]) -> dict[str, Any]:
             },
             {
                 "title": "Безопасность",
-                "summary": "Рост идет по точным номерам предложений и не переписывает тела исходных заметок.",
+                "summary": "Рост идет по точным номерам интентов ревью и не переписывает тела исходных заметок.",
                 "items": [
                     "по умолчанию это пробный прогон",
                     "нужны принятые примеры",
@@ -952,8 +1340,8 @@ async def teach_workspace(
             "cards": cards,
             "candidate_count": len(candidates),
             "selection_policy": [
-                "prefer high-priority review items",
-                "cover domains, material types, hierarchy, causal links, and optional memory",
+                "prefer high-priority review intents",
+                "cover domains, material formats, hierarchy, causal links, and optional memory",
                 "return dry-run approval payloads only",
             ],
         },
@@ -961,7 +1349,7 @@ async def teach_workspace(
         "queue_summary": queue.get("summary", {}),
         "policy": [
             "teach is read-only",
-            "teach does not approve or apply review items",
+            "teach does not approve or apply review intents",
             "approval payloads keep dry_run=true",
             "accepted examples are required before grow can apply learned batches",
             "source note bodies are not rewritten",
@@ -1034,7 +1422,7 @@ async def connect_nodes(
             "evidence": evidence,
             "next_actions": [
                 "Use read_file on the key route nodes before writing or deciding.",
-                "Treat INFERRED edges as candidates until a review item accepts them.",
+                "Treat INFERRED edges as candidates until a review intent accepts them.",
             ],
         },
         "summary": {
@@ -1294,18 +1682,48 @@ async def agent_workspace(
     if normalized_action == "analyze_inbox":
         return _attach_workspace_state(core, analyze_inbox(core, source_kind=source_kind, batch_id=batch_id, limit=safe_limit))
     if normalized_action == "review_next":
-        return _attach_workspace_state(core, review_next(
+        if _use_vault_review_queue(core, kind, source_kind, batch_id, trace_id):
+            return _attach_workspace_state(core, await _vault_review_next(
+                core,
+                kind=kind,
+                limit=safe_limit,
+                max_notes=_kwargs.get("max_notes", 120),
+                max_domains=_kwargs.get("max_domains", 8),
+                include_memory=bool(_kwargs.get("include_memory", False)),
+            ))
+        workspace_review = review_next(
             core,
             kind=kind,
             limit=safe_limit,
             source_kind=source_kind,
             batch_id=batch_id,
             trace_id=trace_id,
+        )
+        return _attach_workspace_state(core, _attach_review_view(
+            workspace_review,
+            kind,
+            workspace_review.get("summary", {}).get("items"),
         ))
     if normalized_action == "apply_review_items":
+        item_ids = item_ids or []
+        has_vault_ids = any(str(item_id).strip().lower().startswith("rq-") for item_id in item_ids)
+        has_workspace_ids = any(str(item_id).strip().lower().startswith("aw-") for item_id in item_ids)
+        if has_vault_ids:
+            if has_workspace_ids:
+                raise ValueError("Do not mix rq-* vault review IDs and aw-* workspace review IDs in one apply call")
+            return _attach_workspace_state(core, await _apply_vault_review_items(
+                core,
+                item_ids=item_ids,
+                dry_run=dry_run,
+                max_notes=_kwargs.get("max_notes", 120),
+                max_domains=_kwargs.get("max_domains", 8),
+                limit=safe_limit,
+                allow_overwrite=bool(_kwargs.get("allow_overwrite", False)),
+                include_memory=bool(_kwargs.get("include_memory", False)),
+            ))
         return _attach_workspace_state(core, apply_review_items(
             core,
-            item_ids=item_ids or [],
+            item_ids=item_ids,
             dry_run=dry_run,
             kind=kind,
             source_kind=source_kind,

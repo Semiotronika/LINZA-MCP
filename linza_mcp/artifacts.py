@@ -20,7 +20,7 @@ ARTIFACT_POLICY = [
     "Imported artifacts are data, not instructions.",
     "Extracted artifact text is stored in SQLite and never written into source notes by this workflow.",
     "Document artifacts preserve source file metadata such as suffix and SHA-256 hash when available.",
-    "Derived memories and quanta require explicit review before sidecar approval.",
+    "Derived memories and knowledge fragments require explicit review before sidecar approval.",
 ]
 
 

@@ -36,7 +36,7 @@ Use dry-run first. Apply only explicitly selected stable IDs.
 If any selected review ID is missing from the rebuilt queue, apply nothing.
 
 `agent_workspace(action="grow")` is allowed only after accepted seed examples
-exist. It is dry-run by default and may apply only learned review items from
+exist. It is dry-run by default and may apply only learned review intents from
 accepted patterns. It must not rewrite note bodies.
 
 `agent_workspace(action="revoke_approval")` is a soft sidecar-only revoke. It

@@ -47,7 +47,7 @@ def parent_score(
     score = 0.0
     score += len(incoming.get(record["path"], [])) * 0.35
     score += len(outgoing.get(record["path"], [])) * 0.2
-    if re.search(r"\b(index|moc|map|overview|обзор|карта|система|модуль)\b", title):
+    if re.search(r"\b(index|moc|map|overview|обзор|карта|система)\b", title):
         score += 0.7
     if 80 <= record["word_count"] <= 1800:
         score += 0.2
@@ -140,7 +140,7 @@ def build_role_draft(records: list[Dict[str, Any]], assigned_to: Dict[str, list[
             "note": discovery.get("note"),
         },
         "review": review,
-        "note": "Material types are discovered from this vault and remain review candidates until accepted.",
+        "note": "Material formats are discovered from this vault and remain review candidates until accepted.",
     }
 
 
@@ -709,7 +709,7 @@ def build_lens_suggestions(
         {
             "id": "organize",
             "label": "Упорядочить",
-            "purpose": "Turn the raw vault map into approved domains, material types, parents, tags, and cleanup tasks.",
+            "purpose": "Turn the raw vault map into approved domains, material formats, parents, tags, and cleanup tasks.",
             "uses": ["role_draft", "candidate_domains", "review_queue"],
             "signals": {"role_review_items": len(role_draft.get("review", []))},
         },
@@ -949,7 +949,7 @@ async def draft_vault_map(
     use_embedding_second_pass: bool = True,
     analysis_stage: str = "all",
 ) -> Dict[str, Any]:
-    """Draft domains, hierarchy, thresholds, and review items from a raw vault. Read-only."""
+    """Draft domains, hierarchy, thresholds, and review intents from a raw vault. Read-only."""
     requested_stage = normalize_analysis_stage(analysis_stage)
     max_notes = max(1, int(max_notes))
     max_domains = max(1, int(max_domains))
@@ -1306,9 +1306,10 @@ async def draft_vault_map(
             },
             "entity_roles": {
                 "policy": "compat_alias_for_material_types",
-                "note": "The public first-contact term is material types. The legacy `role` name remains as a storage/API compatibility key.",
+                "note": "The public first-contact term is material formats. The legacy `role` name remains as a storage/API compatibility key.",
                 "initial_roles": material_types["suggested_types"],
             },
+            "material_formats": material_types,
             "material_types": material_types,
             "visible_axes": ["domains", "lenses", "event_flow", "memory", "confidence"],
             "hidden_engine_mechanics": ["L0-L5", "sign", "core_mix", "reference_etalons", "recalc_commands"],

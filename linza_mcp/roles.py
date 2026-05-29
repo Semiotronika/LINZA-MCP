@@ -1,6 +1,6 @@
-"""Data-driven material type discovery for LINZA.
+"""Data-driven material format discovery for LINZA.
 
-This module intentionally does not contain a fixed material-type ontology.
+This module intentionally does not contain a fixed material-format ontology.
 LINZA may read previously accepted YAML values for compatibility, but fresh
 vault analysis starts from observed note structure and cluster evidence.
 """
@@ -16,6 +16,19 @@ from .utils import get_linza_property, normalize_note_name, strip_frontmatter, t
 
 
 UNTYPED_ROLE = "untyped"
+DEPRECATED_NOUZ_ROLE_VALUES = {
+    "artifact",
+    "core",
+    "meta",
+    "module",
+    "pattern",
+    "quant",
+    "артефакт",
+    "квант",
+    "модуль",
+    "паттерн",
+    "ядро",
+}
 
 
 def normalize_role(role: str) -> str:
@@ -33,12 +46,19 @@ def guess_note_role(title: str, body: str, folder: str, metadata: dict[str, Any]
     Older LINZA versions used title/body keyword heuristics here. That made the
     first analysis look more confident than it was. The new contract is clean
     slate: if the user has not accepted a `role`, the note is untyped until the
-    data-driven material-type clustering proposes candidates.
+    data-driven material-format clustering proposes candidates.
     """
 
     accepted_role = get_linza_property(metadata, "role") if isinstance(metadata, dict) else None
     if accepted_role:
         role = normalize_role(str(accepted_role))
+        if role in DEPRECATED_NOUZ_ROLE_VALUES:
+            return {
+                "role": UNTYPED_ROLE,
+                "raw_role": str(accepted_role),
+                "confidence": "none",
+                "reason": "deprecated_nouz_role_ignored",
+            }
         return {
             "role": role,
             "raw_role": str(accepted_role),
@@ -60,10 +80,10 @@ def role_definition(role: str) -> dict[str, Any]:
         "yaml_value": role_id,
         "label_ru": role_id,
         "definition_ru": (
-            "Автоматически найденный тип материала в этой базе. Название является "
+            "Автоматически найденный формат материала в этой базе. Название является "
             "черновиком и должно быть принято или переименовано пользователем."
         ),
-        "review_question_ru": f"Этот найденный тип `{role_id}` подходит для этой заметки?",
+        "review_question_ru": f"Этот найденный формат `{role_id}` подходит для этой заметки?",
     }
 
 
@@ -76,7 +96,7 @@ def role_review_metadata(role: str, label: str | None = None) -> dict[str, Any]:
         "kind": "material_type",
         "label": human_label,
         "definition": definition["definition_ru"],
-        "question": f"Эта заметка действительно относится к найденному типу `{human_label}`?",
+        "question": f"Эта заметка действительно относится к найденному формату `{human_label}`?",
         "yaml_value": role_id,
         "storage_key": "role",
         "write_preview": f"Если принять, LINZA добавит в YAML только `role: {role_id}`. Текст заметки не меняется.",
@@ -99,7 +119,7 @@ def material_type_vocabulary(type_counts: list[tuple[str, int]] | None = None) -
         "suggested_types": observed,
         "counts": counts,
         "note": (
-            "LINZA does not ship a fixed material-type ontology. Types are "
+            "LINZA does not ship a fixed material-format ontology. Formats are "
             "discovered from this vault's structure and must be reviewed or renamed."
         ),
     }
@@ -215,7 +235,7 @@ def feature_cosine(left: dict[str, float], right: dict[str, float]) -> float:
 
 
 def discover_material_types(records: list[dict[str, Any]], assigned_to: dict[str, list[str]] | None = None) -> dict[str, Any]:
-    """Cluster notes by observed structure and return draft material types."""
+    """Cluster notes by observed structure and return draft material formats."""
 
     if not records:
         return {"policy": "discover_from_vault_then_review", "types": [], "assignments": {}}
@@ -313,7 +333,7 @@ def discover_material_types(records: list[dict[str, Any]], assigned_to: dict[str
         "types": types,
         "assignments": assignments,
         "threshold": threshold,
-        "note": "No material-type names are hardcoded; type IDs and labels are draft review candidates.",
+        "note": "No material-format names are hardcoded; format IDs and labels are draft review candidates.",
     }
 
 

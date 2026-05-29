@@ -57,6 +57,7 @@ class DraftMapTests(OperatorTestCase):
             self.assertFalse(contract["root"]["expose_l0"])
             self.assertEqual(contract["root"]["policy"], "implicit_vault_root")
             self.assertEqual(contract["entity_roles"]["policy"], "compat_alias_for_material_types")
+            self.assertEqual(contract["material_formats"], contract["material_types"])
             self.assertEqual(contract["material_types"]["policy"], "discover_from_vault_then_review")
             self.assertEqual(contract["material_types"]["baseline_types"], [])
             self.assertTrue(all(item.startswith("type-") for item in contract["material_types"]["suggested_types"]))
@@ -243,6 +244,7 @@ class DraftMapTests(OperatorTestCase):
             self.assertTrue(roles_by_path["Research/Embedding Experiment.md"].startswith("type-"))
             self.assertTrue(roles_by_path["Research/Search Specification.md"].startswith("type-"))
             material_types = result["onboarding_contract"]["material_types"]
+            self.assertEqual(result["onboarding_contract"]["material_formats"], material_types)
             self.assertEqual(material_types["baseline_types"], [])
             self.assertEqual(material_types["optional_types"], [])
             self.assertNotIn("experiment", material_types["suggested_types"])
@@ -274,6 +276,15 @@ class DraftMapTests(OperatorTestCase):
             )
             self.assertEqual(accepted_role["role"], "lab-log")
             self.assertEqual(accepted_role["reason"], "accepted_yaml")
+
+            nouz_legacy_role = guess_note_role(
+                "Legacy NOUZ note",
+                "Body",
+                "",
+                {"linza_role": "модуль"},
+            )
+            self.assertEqual(nouz_legacy_role["role"], "untyped")
+            self.assertEqual(nouz_legacy_role["reason"], "deprecated_nouz_role_ignored")
 
             role_meta = role_review_metadata("type-001")
             self.assertEqual(role_meta["kind"], "material_type")

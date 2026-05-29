@@ -13,7 +13,7 @@ import anyio
 from mcp.server import NotificationOptions, Server
 import mcp.server.stdio
 from mcp.server.models import InitializationOptions
-from mcp.types import CallToolResult, TextContent, Tool
+from mcp.types import CallToolResult, TextContent, Tool, ToolAnnotations
 
 from .compat import __version__, LinzaCore
 from .embed import (
@@ -36,6 +36,14 @@ REPORT_DEFAULTS = {
     "tag_vocabulary": ".linza/reports/05 Tag Vocabulary Audit.md",
     "review_apply_queue": ".linza/reports/06 Review Apply Queue.md",
 }
+
+
+AGENT_WORKSPACE_ACTION_DESCRIPTION = (
+    "Workflow action. Setup: doctor, map. Review/growth: teach, grow, review_next, "
+    "apply_review_items, history, revoke_approval. Artifact flow: ingest_artifacts, "
+    "analyze_inbox. Graph/context: connect, search_memory, export_context. "
+    "Trace calibration: record_trace, analyze_trace, review_calibr."
+)
 
 
 def _json_result(payload: Any) -> CallToolResult:
@@ -107,6 +115,7 @@ def _tool(
     description: str,
     properties: dict[str, Any] | None = None,
     required: list[str] | None = None,
+    annotations: ToolAnnotations | None = None,
 ) -> Tool:
     schema: dict[str, Any] = {
         "type": "object",
@@ -114,7 +123,24 @@ def _tool(
     }
     if required:
         schema["required"] = required
-    return Tool(name=name, description=description, inputSchema=schema)
+    return Tool(name=name, description=description, inputSchema=schema, annotations=annotations)
+
+
+def _annotations(
+    title: str,
+    *,
+    read_only: bool,
+    destructive: bool = False,
+    idempotent: bool = False,
+    open_world: bool = False,
+) -> ToolAnnotations:
+    return ToolAnnotations(
+        title=title,
+        readOnlyHint=read_only,
+        destructiveHint=destructive,
+        idempotentHint=idempotent,
+        openWorldHint=open_world,
+    )
 
 
 class LinzaMCPServer:
@@ -133,17 +159,35 @@ class LinzaMCPServer:
         @self.server.list_tools()
         async def list_tools() -> list[Tool]:
             tools = [
-                _tool("index_all", "Full reindex of the vault.", {"force": {"type": "boolean"}}),
+                _tool(
+                    "index_all",
+                    "Rebuild the LINZA sidecar index for the configured Markdown vault. "
+                    "Use after first setup or after notes change; writes only .linza/linza.db "
+                    "and does not modify note bodies.",
+                    {
+                        "force": {
+                            "type": "boolean",
+                            "default": False,
+                            "description": "When true, rebuild stored embeddings and semantic bridges even if the existing sidecar looks current.",
+                        },
+                    },
+                    annotations=_annotations(
+                        "Index vault",
+                        read_only=False,
+                        destructive=False,
+                        idempotent=True,
+                    ),
+                ),
                 _tool("index_file", "Incremental index of one file.", {
                     "path": {"type": "string"},
                     "content": {"type": "string"},
                 }, ["path"]),
-                _tool("search", "Semantic search across notes.", {
-                    "query": {"type": "string"},
-                    "profile": {"type": "string"},
-                    "top_k": {"type": "integer", "default": 5},
-                    "explain": {"type": "boolean", "default": False},
-                }, ["query"]),
+                _tool("search", "Find relevant indexed Markdown notes by semantic/lexical query. Use before read_file when the path is unknown; may record search history in the LINZA sidecar.", {
+                    "query": {"type": "string", "description": "Natural-language query used to rank indexed notes."},
+                    "profile": {"type": "string", "description": "Optional search profile name; defaults to the active profile in the sidecar."},
+                    "top_k": {"type": "integer", "default": 5, "description": "Maximum number of note matches to return."},
+                    "explain": {"type": "boolean", "default": False, "description": "When true, include scoring/context details for debugging retrieval."},
+                }, ["query"], annotations=_annotations("Search notes", read_only=True)),
                 _tool("suggest_links", "Suggest semantically similar notes for a file.", {
                     "path": {"type": "string"},
                     "profile": {"type": "string"},
@@ -158,7 +202,13 @@ class LinzaMCPServer:
                 _tool("list_profiles", "List profiles."),
                 _tool("switch_profile", "Set active default profile.", {"name": {"type": "string"}}, ["name"]),
                 _tool("get_profile", "Get profile details.", {"name": {"type": "string"}}, ["name"]),
-                _tool("read_file", "Read a note.", {"path": {"type": "string"}}, ["path"]),
+                _tool(
+                    "read_file",
+                    "Read one vault-relative Markdown file exactly as stored. Use after search or when the path is known; does not write files or sidecar state.",
+                    {"path": {"type": "string", "description": "Vault-relative Markdown path to read, such as notes/project.md."}},
+                    ["path"],
+                    annotations=_annotations("Read note", read_only=True, idempotent=True),
+                ),
                 _tool("write_file", "Create or explicitly overwrite a Markdown note. Dry-run by default.", {
                     "path": {"type": "string"},
                     "content": {"type": "string"},
@@ -166,9 +216,17 @@ class LinzaMCPServer:
                     "allow_overwrite": {"type": "boolean", "default": False},
                 }, ["path", "content"]),
                 _tool("get_bridges", "Get semantic bridges for a note.", {"path": {"type": "string"}}, ["path"]),
-                _tool("get_stats", "Get LINZA sidecar stats."),
+                _tool(
+                    "get_stats",
+                    "Return quick LINZA sidecar status: indexed file count, profiles, semantic bridges, and active profile. Use for health checks.",
+                    annotations=_annotations("Get LINZA stats", read_only=True, idempotent=True),
+                ),
                 _tool("calibrate_embeddings", "Report embedding calibration and anisotropy diagnostics."),
-                _tool("scan_vault", "Read-only vault diagnostic."),
+                _tool(
+                    "scan_vault",
+                    "Run a read-only vault diagnostic over files, links, metadata, and LINZA setup. Use at first contact or when deciding what to fix next.",
+                    annotations=_annotations("Scan vault", read_only=True, idempotent=True),
+                ),
                 _tool("draft_vault_map", "Read-only first-pass LINZA map for a raw vault.", {
                     "max_notes": {"type": "integer", "default": 120},
                     "max_domains": {"type": "integer", "default": 8},
@@ -225,7 +283,7 @@ class LinzaMCPServer:
                     "allow_overwrite": {"type": "boolean", "default": False},
                     "include_memory": {"type": "boolean", "default": False},
                 }, ["item_ids"]),
-                _tool("apply_learned_review_queue", "Preview/apply review queue items selected from accepted examples.", {
+                _tool("apply_learned_review_queue", "Preview/apply review intents selected from accepted examples.", {
                     "mode": {"type": "string", "default": "review"},
                     "max_notes": {"type": "integer", "default": 120},
                     "max_domains": {"type": "integer", "default": 8},
@@ -234,17 +292,18 @@ class LinzaMCPServer:
                     "allow_overwrite": {"type": "boolean", "default": False},
                     "include_memory": {"type": "boolean", "default": False},
                 }),
-                _tool("guide_next_steps", "Explain the current LINZA onboarding stage and safe next actions.", {
-                    "max_notes": {"type": "integer", "default": 120},
-                    "max_domains": {"type": "integer", "default": 8},
-                    "limit": {"type": "integer", "default": 40},
-                    "include_memory": {"type": "boolean", "default": False},
-                    "include_tool_guide": {"type": "boolean", "default": False},
-                    "language": {"type": "string", "enum": ["auto", "en", "ru"], "default": "auto"},
-                }),
-                _tool("agent_workspace", "One facade for workspace maps, teaching, supervised growth, artifact inbox, analysis, review, graph connect, and context export.", {
+                _tool("guide_next_steps", "Read the current LINZA state and recommend the next safe onboarding/review step in plain language. This is the navigator for agents and users; it does not write files.", {
+                    "max_notes": {"type": "integer", "default": 120, "description": "Maximum notes to sample while building the review window."},
+                    "max_domains": {"type": "integer", "default": 8, "description": "Maximum domain groups to consider in the current guide pass."},
+                    "limit": {"type": "integer", "default": 40, "description": "Maximum review intents to inspect when choosing the next step."},
+                    "include_memory": {"type": "boolean", "default": False, "description": "Include memory review candidates in the suggested route."},
+                    "include_tool_guide": {"type": "boolean", "default": False, "description": "Include internal tool-audience/debug guidance in the response; normally false for users."},
+                    "language": {"type": "string", "enum": ["auto", "en", "ru"], "default": "auto", "description": "User-facing guide language: auto-detect, English, or Russian."},
+                }, annotations=_annotations("Guide next steps", read_only=True)),
+                _tool("agent_workspace", "Main LINZA workflow facade. Choose one action to inspect the workspace, ingest artifacts, review/apply supervised items, explain connections, search memory, export context, or run diagnostics. Safe actions are read-only; apply actions preview by default with dry_run=true.", {
                     "action": {
                         "type": "string",
+                        "description": AGENT_WORKSPACE_ACTION_DESCRIPTION,
                         "enum": [
                             "ingest_artifacts",
                             "analyze_inbox",
@@ -264,29 +323,29 @@ class LinzaMCPServer:
                             "doctor",
                         ],
                     },
-                    "artifacts": {"type": "array", "items": {"type": "object"}},
-                    "trace": {"type": "object"},
-                    "trace_id": {"type": "string"},
-                    "source_kind": {"type": "string"},
-                    "batch_id": {"type": "string"},
-                    "privacy": {"type": "string", "default": "private"},
-                    "kind": {"type": "string", "default": "all"},
-                    "mode": {"type": "string", "default": "assisted"},
-                    "item_ids": {"type": "array", "items": {"type": "string"}},
-                    "approval_id": {"type": "integer"},
-                    "reason": {"type": "string"},
-                    "include_revoked": {"type": "boolean", "default": True},
-                    "dry_run": {"type": "boolean", "default": True},
-                    "allow_overwrite": {"type": "boolean", "default": False},
-                    "include_memory": {"type": "boolean", "default": False},
-                    "source": {"type": "string"},
-                    "target": {"type": "string"},
-                    "max_depth": {"type": "integer", "default": 4},
-                    "max_notes": {"type": "integer", "default": 120},
-                    "max_domains": {"type": "integer", "default": 8},
-                    "query": {"type": "string"},
-                    "limit": {"type": "integer", "default": 20},
-                }, ["action"]),
+                    "artifacts": {"type": "array", "items": {"type": "object"}, "description": "Artifact inputs for ingest_artifacts; each item may include text/content, path/source_uri, title, and metadata."},
+                    "trace": {"type": "object", "description": "Agent trace payload for record_trace; stored as structured sidecar evidence, not raw chain-of-thought."},
+                    "trace_id": {"type": "string", "description": "Trace identifier used by analyze_trace and review_calibr."},
+                    "source_kind": {"type": "string", "description": "Optional artifact/source filter such as chat, document, note, log, web_article, or trace."},
+                    "batch_id": {"type": "string", "description": "Optional batch identifier for grouping ingested artifacts or review intents."},
+                    "privacy": {"type": "string", "default": "private", "description": "Privacy label stored with artifacts/traces; default private."},
+                    "kind": {"type": "string", "default": "all", "description": "Review item kind filter for review/history actions; use all for no filter."},
+                    "mode": {"type": "string", "default": "assisted", "description": "Growth mode for grow; default assisted."},
+                    "item_ids": {"type": "array", "items": {"type": "string"}, "description": "Stable review intent IDs to preview/apply with apply_review_items."},
+                    "approval_id": {"type": "integer", "description": "Existing approval row ID for revoke_approval."},
+                    "reason": {"type": "string", "description": "Reason recorded when revoking an approval or applying a reviewed action."},
+                    "include_revoked": {"type": "boolean", "default": True, "description": "Include revoked approvals in history results."},
+                    "dry_run": {"type": "boolean", "default": True, "description": "Preview apply/revoke actions without writing active sidecar changes; default true."},
+                    "allow_overwrite": {"type": "boolean", "default": False, "description": "Allow reviewed YAML/frontmatter writes where supported; source note bodies are still protected by LINZA policy."},
+                    "include_memory": {"type": "boolean", "default": False, "description": "Include memory candidates in teach/grow/review workflows."},
+                    "source": {"type": "string", "description": "Source note/path/query endpoint for connect."},
+                    "target": {"type": "string", "description": "Target note/path endpoint for connect."},
+                    "max_depth": {"type": "integer", "default": 4, "description": "Maximum graph depth for connection/path exploration."},
+                    "max_notes": {"type": "integer", "default": 120, "description": "Maximum notes to sample when building workspace maps or growth candidates."},
+                    "max_domains": {"type": "integer", "default": 8, "description": "Maximum domain groups to build in map/growth workflows."},
+                    "query": {"type": "string", "description": "Search query for search_memory and export_context."},
+                    "limit": {"type": "integer", "default": 20, "description": "Maximum items/cards/results to return for the selected action."},
+                }, ["action"], annotations=_annotations("Run LINZA workflow", read_only=False, destructive=False)),
                 _tool("list_approved_items", "List reviewed sidecar approvals.", {
                     "item_type": {"type": "string"},
                     "limit": {"type": "integer", "default": 100},

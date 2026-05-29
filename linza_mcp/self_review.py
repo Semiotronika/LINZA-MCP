@@ -12,8 +12,8 @@ from .events import analyze_inbox
 
 
 REVIEW_POLICY = ARTIFACT_POLICY + [
-    "Accepted review items are written to sidecar storage only.",
-    "Review items never execute imported text and never change source artifact content.",
+    "Accepted review intents are written to sidecar storage only.",
+    "Review intents never execute imported text and never change source artifact content.",
 ]
 
 
@@ -22,7 +22,8 @@ def review_id(kind: str, payload: dict[str, Any]) -> str:
     digest = hashlib.sha1(f"{kind}:{body}".encode("utf-8")).hexdigest()[:14]
     labels = {
         "memory_candidate": "memory",
-        "quant_candidate": "quant",
+        "knowledge_candidate": "knowledge",
+        "quant_candidate": "knowledge",
         "calibr_card": "calibr",
     }
     label = labels.get(kind, "review")
@@ -46,8 +47,14 @@ def _kind_matches(item_kind: str, requested: str) -> bool:
     aliases = {
         "memory": "memory_candidate",
         "memories": "memory_candidate",
-        "quant": "quant_candidate",
-        "quanta": "quant_candidate",
+        "knowledge": "knowledge_candidate",
+        "knowledge_item": "knowledge_candidate",
+        "knowledge_items": "knowledge_candidate",
+        "claim": "knowledge_candidate",
+        "claims": "knowledge_candidate",
+        "quant": "knowledge_candidate",
+        "quanta": "knowledge_candidate",
+        "quant_candidate": "knowledge_candidate",
         "calibr": "calibr_card",
         "self_check": "calibr_card",
         "self-check": "calibr_card",
@@ -58,7 +65,7 @@ def _kind_matches(item_kind: str, requested: str) -> bool:
 def _display_lines(item_id: str, title: str, evidence: str, effect: str) -> dict[str, Any]:
     lines = [
         f"Пункт ревью: {item_id}",
-        f"Предложение: {preview_text(title, 140)}",
+        f"Интент ревью: {preview_text(title, 140)}",
         f"Основание: {preview_text(evidence, 220)}",
         f"Что изменится: {effect}",
     ]
@@ -122,7 +129,7 @@ def build_review_items(
 
     include_artifacts = (
         _kind_matches("memory_candidate", kind)
-        or _kind_matches("quant_candidate", kind)
+        or _kind_matches("knowledge_candidate", kind)
     )
     if include_artifacts:
         analysis = analyze_inbox(
@@ -164,7 +171,7 @@ def build_review_items(
             if len(items) >= safe_limit and kind not in {"all", "", "*"}:
                 return items[:safe_limit]
 
-        for summary in analysis.get("quant_candidates", []):
+        for summary in analysis.get("knowledge_candidates", analysis.get("quant_candidates", [])):
             text = str(summary.get("summary") or "")
             if not text:
                 continue
@@ -182,10 +189,10 @@ def build_review_items(
                 "source": "agent_workspace",
             }
             item = _review_item(
-                "quant_candidate",
+                "knowledge_candidate",
                 payload,
                 "high" if int(quality.get("score", 0)) >= 5 else "medium",
-                f"Quant: {summary.get('title') or summary.get('artifact_id')}",
+                f"Knowledge: {summary.get('title') or summary.get('artifact_id')}",
                 text,
                 str(summary.get("evidence") or text),
             )
@@ -237,8 +244,8 @@ def _item_type_for_item(item: dict[str, Any]) -> str:
     payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
     if kind == "memory_candidate":
         return "agent_memory"
-    if kind == "quant_candidate":
-        return "agent_quant"
+    if kind in {"knowledge_candidate", "quant_candidate"}:
+        return "agent_knowledge"
     if kind == "calibr_card":
         return str(payload.get("target_item_type") or "calibr_lesson")
     return "agent_review_item"
@@ -279,7 +286,7 @@ def apply_review_items(
             results.append({
                 "id": item_id,
                 "status": "not_found",
-                "reason": "No current unapproved review item has this id.",
+                "reason": "No current unapproved review intent has this id.",
             })
             continue
         matched += 1

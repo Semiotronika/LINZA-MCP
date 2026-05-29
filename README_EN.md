@@ -1,8 +1,8 @@
-# LINZA - Local MCP Server for Agent Workspaces
+# LINZA - Local MCP Server for Agent Work with Knowledge Folders
 
 > *It does not change your data. It changes how you see it.*
 
-LINZA works with Obsidian, Markdown folders, documents, articles, chats, logs, and drafts. It is useful when the material is already too large for "just look through it", but you still do not want an agent freely rewriting your notes.
+LINZA works with Obsidian vaults, Markdown folders, documents, articles, logs, and drafts. It is useful when there is already too much material and you want to understand the knowledge base, identify its main areas, and teach an agent to navigate it well.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://python.org)
 [![MCP](https://img.shields.io/badge/protocol-MCP_stdio-lightgrey.svg)](https://modelcontextprotocol.io)
@@ -11,61 +11,59 @@ LINZA works with Obsidian, Markdown folders, documents, articles, chats, logs, a
 
 [Russian version](README.md)
 
-LINZA reads a folder, builds a local SQLite sidecar at `.linza/linza.db`, and gives the agent a working map: which themes exist, which material types repeat, which notes may be connected, where cause/effect chains appear, and what future sessions may need to remember.
+LINZA reads a selected folder, builds a local SQLite database next to it at `.linza/linza.db`, and gives the agent a working map: which topics exist in the material, which formats repeat, which notes may be related, where cause/effect chains appear, and what may be useful in future sessions.
 
-Your source files remain yours. LINZA does not rewrite notes during indexing, does not turn a raw log into a rule, and does not teach the agent behind your back. It turns hypotheses into short review items: the user decides, the agent executes.
+Source files remain untouched. LINZA does not rewrite notes during indexing, does not turn a raw log into a rule, and does not teach the agent behind your back. It turns hypotheses into short intents - proposed actions with evidence. The user decides, the agent executes.
+
+```text
+doctor -> index -> map -> review intents -> teach -> grow preview -> explicit apply
+```
 
 ---
 
 ## What LINZA Is For
 
-Search helps find a word. LINZA helps an agent understand the working situation.
+LINZA collects several concrete things that help agents work with a knowledge base:
 
-You may have:
+1. **Folder map**
+   How many notes were found, whether the index is fresh, which areas are visible, and which materials are waiting for your review.
 
-- an Obsidian vault with notes and drafts;
-- a project folder with Markdown documents;
-- articles, PDFs, DOCX, XLSX, JSON, chats, and logs;
-- decision traces: problem, discussion, action, result;
-- rules that future agents should remember, but should not invent on their own.
+2. **Areas**
+   Large semantic groups. Their names remain drafts until you accept or rename them.
 
-LINZA turns that into a careful working layer next to your files. First it shows a map and evidence. Then you approve a few good examples. Only after that can the agent continue in small, reviewable batches.
+3. **Material formats**
+   Logs, drafts, specifications, research notes, cases, rules, and other recurring forms found in the folder.
 
-```text
-doctor -> index -> map -> review items -> teach -> grow preview -> explicit apply
-```
+4. **Relations**
+   Possible neighborhoods, hierarchy, cause/effect, and routes between nodes. LINZA should show not only how documents are related, but also why.
+
+5. **Memory for future agents**
+   Short candidates: what to remember, when to recall it, what is stale, and what looks uncertain.
+
+6. **Context packs**
+   Compact selections for an agent: selected context with sources, relations, and boundaries.
 
 ---
 
-## What Appears After the First Run
+## Material Formats
 
-LINZA does not try to become the owner of your knowledge base. It collects a few concrete things that help agents work more calmly.
+A material format is the user-facing name for a recurring note form. Examples: `diagnostic log`, `decision`, `article draft`, `research note`, `specification`.
 
-1. **Folder map**
-   How many notes were found, whether the index is fresh, which areas are visible, and which materials are waiting for review.
+LINZA first sees only structure: length, headings, lists, links, tables, folders, and recurring signals. That means the first result may have a neutral name: `type-001`. The user can say: "these are logs". LINZA then stores the mapping `type-001 -> logs` in `.linza`.
 
-2. **Areas**
-   Broad semantic groups. Their names are drafts until the user accepts or renames them.
+The internal API keeps the old compatibility keys `material_type`, `type_name`, and `role`. Externally, the documentation and review cards say "format" because that is closer to how users actually think about their material.
 
-3. **Material types**
-   Notes, drafts, specifications, research notes, cases, logs, rules, and other recurring forms found in the folder.
+Important boundary:
 
-4. **Relations**
-   Possible neighbors, hierarchy, cause/effect, and routes between nodes. LINZA should show not only "connect these", but also "why".
-
-5. **Memory for future agents**
-   Short candidates: what to remember, when to recall it, where it may become stale, and what is uncertain.
-
-6. **Context packs**
-   Compact packets for agents: not the whole vault, but selected context with sources and boundaries.
+- accepting a format name records a decision in `.linza`;
+- writing `role: logs` to YAML is only possible through a separate review intent;
+- note text does not change.
 
 ---
 
 ## What Review Looks Like
 
-LINZA tries not to show the user raw JSON or a long tool list. A normal first response should look more like this:
-
-Internally, each review item is still structured data with an ID, evidence, and a preview/apply payload. Externally, LINZA returns ready-to-display lines through `display` and `human_message`, so an agent can write a clean answer instead of dumping JSON.
+LINZA returns information roughly like this:
 
 ```text
 LINZA is ready
@@ -73,65 +71,70 @@ LINZA is ready
 Material:
 - 42 notes indexed
 - 3 incoming artifacts waiting for review
-- sidecar: .linza/linza.db
+- service database: .linza/linza.db
 
 Next step:
 1. Review discovered areas
-2. Accept, rename, or skip 3-5 review items
-3. Nothing is written without dry-run/apply
+2. Accept, rename, or skip 3-5 review intents
+3. Nothing is written without a dry-run and explicit apply
 
-Review item:
-Proposal: connect "Retrieval Quality Note" and "Source Policy"
-Why: shared vocabulary, review-flow references, nearby chunks
-Write impact: none yet; accepting records a sidecar relation
+Review intent:
+Accept material format "diagnostic logs" from 8 examples
+Why: similar structure, repeated headings, nearby chunks
+What changes: the format name is stored in .linza; Markdown notes do not change
 ```
 
-A good review item always answers the user's question: **why does LINZA think this?** It should carry sources, snippets/chunks, relation type, confidence, and a clear write impact.
+Internally, each intent remains a structure with an ID, evidence, and the data needed to preview the change and then confirm/write it. To you, LINZA returns ready-to-display cards so the agent can show a clear answer instead of JSON.
+
+A good intent always answers the main question: **why does LINZA think this?** It should include sources, chunks, relation type, confidence, and an honest description of what will change after applying it.
 
 ---
 
-## How It Differs
+## Teaching And Growth
 
-Obsidian Graph View shows links that already exist. LINZA looks for what has not been written down yet: hidden topics, recurring material types, possible relations, and gaps.
+The autonomy model is:
 
-Dataview and auto-tagging are useful when the structure already lives in YAML. LINZA starts earlier: it proposes hypotheses, shows evidence, and keeps acceptance behind a review gate.
+1. `review_next` shows cards.
+2. The user accepts, renames, or skips.
+3. `apply_review_items` runs dry-run first.
+4. After confirmation, the selected intent is written to `.linza` or to compact YAML, if that write type supports it.
+5. `teach` selects good accepted examples.
+6. `grow` proposes similar intents from those examples and explains `selected_rules`, the reasons they entered the batch.
 
-It is not an autopilot for rewriting a vault. It is a safer way to give an agent sight and memory without giving it permission to silently change meaning.
+If you accepted the wrong thing, the approval can be softly revoked:
+
+```text
+agent_workspace(action="history")
+agent_workspace(action="revoke_approval", approval_id=17, dry_run=false)
+```
+
+LINZA does not delete the old record and does not try to automatically roll back YAML. It marks the approval as revoked, stops using it as an active example, and keeps a trace in history.
 
 ---
 
 ## Installation
 
-### 1. Install LINZA
+### 1. Install the package
 
 ```powershell
 python -m pip install linza-mcp
 ```
 
-If you want LINZA to extract PDF text directly:
+If you need LINZA to read PDFs directly:
 
 ```powershell
 python -m pip install "linza-mcp[pdf]"
 ```
 
-If you do not need PDF extraction, the normal install is enough. `[pdf]` adds the local `pypdf` extractor.
+The regular install is already enough for Markdown, TXT, JSON, DOCX, and XLSX. `[pdf]` adds the local PDF extractor `pypdf`.
 
 ### 2. Choose a folder
 
-LINZA works with any Markdown folder: an Obsidian vault, a project workspace, or a standalone document folder.
+LINZA works with any Markdown folder: an Obsidian vault, a project workspace, or a separate folder with documents.
 
 In the examples below, replace `/absolute/path/to/workspace-or-vault` with your own path.
 
-### 3. Configure embeddings
-
-For semantic search, LINZA needs an embedding model. The simplest local path is LM Studio:
-
-1. Open LM Studio.
-2. Download an embedding model, for example `text-embedding-granite-embedding-278m-multilingual`, `nomic-embed-text-v1.5`, or another suitable embedding model.
-3. Start Local Server.
-4. Make sure the endpoint is available at `http://127.0.0.1:1234/v1`.
-
-### 4. Connect an MCP client
+### 3. Connect an MCP client
 
 Claude Desktop, Cursor, OpenCode, and other MCP clients usually use this format:
 
@@ -141,15 +144,14 @@ Claude Desktop, Cursor, OpenCode, and other MCP clients usually use this format:
     "linza": {
       "command": "linza-mcp",
       "env": {
-        "LINZA_VAULT": "/absolute/path/to/workspace-or-vault",
-        "LINZA_TOOL_SURFACE": "default"
+        "LINZA_VAULT": "/absolute/path/to/workspace-or-vault"
       }
     }
   }
 }
 ```
 
-VS Code / Copilot MCP uses `servers`:
+VS Code / Copilot MCP uses the `servers` key:
 
 ```json
 {
@@ -165,62 +167,35 @@ VS Code / Copilot MCP uses `servers`:
 }
 ```
 
-That is the minimum startup config. LINZA can start and list tools without an
-embedding server. Add the embedding variables when you want semantic search,
-topic maps, and link suggestions:
+`LINZA_VAULT` is not required for startup: without it, the server uses `./vault`. For real work, an explicit folder is better.
 
-```json
-{
-  "LINZA_EMBED_PROVIDER": "lmstudio",
-  "LINZA_EMBED_URL": "http://127.0.0.1:1234/v1",
-  "LINZA_EMBED_MODEL": "your-embedding-model-name"
-}
-```
-
-Registry and hosted catalog installs should use the package metadata in
-`server.json`. LINZA declares `runtimeHint: "uvx"` for its PyPI package so those
-runners can start it without relying on a globally installed `linza-mcp` binary.
-
-### 5. Check the setup
+### 4. Check startup
 
 ```powershell
 linza-mcp --version
 ```
 
-Then ask the agent:
+After connecting, ask the agent:
 
 ```text
 Check LINZA with agent_workspace(action="doctor").
-Index the folder and show the first 3-5 review items.
+Index the folder and show the first 3-5 review intents.
 ```
-
-### Optional Docker Run
-
-Docker is not required, but the repository includes a small image for isolated stdio runs:
-
-```powershell
-docker build -t linza-mcp .
-docker run --rm -i `
-  -v /absolute/path/to/workspace-or-vault:/data/vault `
-  -e LINZA_EMBED_PROVIDER=lmstudio `
-  -e LINZA_EMBED_URL=http://host.docker.internal:1234/v1 `
-  -e LINZA_EMBED_MODEL=your-embedding-model-name `
-  linza-mcp
-```
-
-Use `host.docker.internal` only when the embedding server runs on the host machine. Otherwise pass the embedding API URL that is reachable from inside the container.
 
 ---
 
 ## Embeddings
 
-Embeddings are the quality of LINZA's sight. The main path is simple: a local model in LM Studio and an MCP server next to your folder.
+LINZA can start and show tools without an embedding server. Embeddings are needed for semantic search, topic maps, and relation suggestions.
 
-- `lmstudio` is the recommended local setup for semantic search, topic maps, and links without cloud calls.
-- `ollama` is a local Ollama setup.
-- `openai` is any OpenAI-compatible endpoint with `/embeddings`.
+The simplest local path is LM Studio:
 
-Example LM Studio environment:
+1. Open LM Studio.
+2. Download an embedding model, for example `text-embedding-granite-embedding-278m-multilingual`, `nomic-embed-text-v1.5`, or another suitable model.
+3. Start Local Server.
+4. Check that the endpoint is available at `http://127.0.0.1:1234/v1`.
+
+Example LM Studio variables:
 
 ```powershell
 $env:LINZA_EMBED_PROVIDER="lmstudio"
@@ -228,83 +203,95 @@ $env:LINZA_EMBED_URL="http://127.0.0.1:1234/v1"
 $env:LINZA_EMBED_MODEL="your-embedding-model-name"
 ```
 
-If you switch embedding provider, model, or dimension, run a full reindex. LINZA checks the embedding signature and stops graph/search workflows when the sidecar is stale or contains mixed vector spaces.
+Supported providers:
+
+- `lmstudio` - recommended local mode;
+- `ollama` - local mode through Ollama;
+- `openai` - any OpenAI-compatible endpoint with `/embeddings`.
+
+If you change provider, model, or dimension, run a full reindex. LINZA checks the embedding signature and stops graph/search workflows if the sidecar is stale or contains mixed vector spaces.
 
 ---
 
-## Artifact Inputs
+## Main MCP Tools
+
+By default, LINZA shows only 7 MCP tools. That is enough for normal work: check status, index the folder, search, read a file, view counters, diagnose the vault, and guide the agent through `agent_workspace`.
+
+| Tool | Purpose |
+| --- | --- |
+| `agent_workspace` | One entry point for diagnostics, map, ingest, review, teaching, growth, relations, memory, and context export |
+| `guide_next_steps` | Show the next safe step in plain language |
+| `index_all` | Index the Markdown folder into `.linza/linza.db` |
+| `search` | Semantic and lexical search |
+| `read_file` | Read an exact Markdown file |
+| `get_stats` | Quick service database counters |
+| `scan_vault` | Folder diagnostic without writing |
+
+Low-level tools are implementation details and are available through `agent_workspace`, so the 7-tool set is a full mode.
+
+### `agent_workspace` Modes
+
+| Action | Mode |
+| --- | --- |
+| `doctor` | Check whether LINZA is ready and what is missing |
+| `map` | Build a workspace map without writing |
+| `teach` | Select strong accepted examples for learning |
+| `grow` | Show or apply growth from accepted examples; dry-run by default |
+| `review_next` | Show the next review cards; vault cards use `rq-*`, artifact and workspace cards use `aw-*` |
+| `apply_review_items` | Show or apply exact selected IDs; dry-run by default |
+| `history` | Show accepted and revoked approvals |
+| `revoke_approval` | Softly revoke an approval without deleting history |
+| `ingest_artifacts` | Store pasted or extracted material in the sidecar |
+| `analyze_inbox` | Find events, memory candidates, and knowledge fragments in artifacts |
+| `connect` | Explain a possible relation between two notes or nodes |
+| `search_memory` | Search reviewed memory and artifact context |
+| `export_context` | Build a compact context pack for another agent |
+| `record_trace` | Store structured traces of agent work, not raw chain-of-thought |
+| `analyze_trace` | Analyze a stored trace for review |
+| `review_calibr` | Review calibration lessons derived from traces |
+
+For maintainers, a separate low-level mode remains available for development and debugging. Full tool description: [Tool Catalog](LINZA_TOOL_CATALOG.md).
+
+---
+
+## Incoming Artifacts
 
 LINZA can accept material that has not yet become a note:
 
 - pasted text;
 - local `.md`, `.txt`, `.json`;
 - local `.docx`, `.xlsx`;
-- local `.pdf` when `pypdf` or `PyPDF2` is installed.
+- local `.pdf`, if `pypdf` or `PyPDF2` is installed.
 
-LINZA does not open web pages by itself. The agent uses its own browser/web-fetch tool, extracts readable text, and passes it to LINZA as an artifact, for example `source_kind="web_article"` or `source_kind="browser_capture"`.
+LINZA does not browse the web by itself. The agent uses its browser, web-fetch tool, or connector, extracts readable text, and passes it to LINZA as an artifact, for example `source_kind="web_article"` or `source_kind="browser_capture"`.
 
-Imported text is analysis material, not an agent instruction. This is the prompt-injection boundary: instructions inside an article, log, chat, or PDF are not executed. Memory, rules, and YAML appear only after review.
-
----
-
-## MCP Tools
-
-By default, LINZA exposes only 7 MCP tools. That is enough for normal work: check readiness, index the folder, search, read a file, get basic counts, scan the vault, and let `agent_workspace` lead the rest.
-
-| Tool | Purpose |
-| --- | --- |
-| `agent_workspace` | One facade for doctor, map, ingest, review, teach, grow, connect, memory search, context export, and calibr |
-| `guide_next_steps` | Show the next safe step in plain language |
-| `index_all` | Index the Markdown folder into `.linza/linza.db` |
-| `search` | Semantic and lexical search |
-| `read_file` | Read an exact file from the vault |
-| `get_stats` | Quick sidecar counters |
-| `scan_vault` | Read-only folder diagnostic |
-
-The other tools are not gone. They are hidden from the default surface:
-
-- workflow actions are available through `agent_workspace`;
-- low-level reports and debugging commands are available with `LINZA_TOOL_SURFACE=advanced`;
-- direct `write_file` is advanced because LINZA should not encourage agents to write note bodies by default.
-
-`agent_workspace(action="teach")` selects seed examples. `grow` returns a preview with `selected_rules`: why each review item entered the batch. The autonomy model is simple: **teach with examples, grow in preview, apply in small reviewed batches.**
-
-If you accepted the wrong thing, revoke it softly:
-
-```text
-agent_workspace(action="history")
-agent_workspace(action="revoke_approval", approval_id=17, dry_run=false)
-```
-
-LINZA does not erase the old row and does not try to automatically revert YAML. It marks the approval as revoked, stops using it as an active example, and keeps the action visible in history.
-
-The advanced surface exists for development and debugging:
-
-```powershell
-$env:LINZA_TOOL_SURFACE="advanced"
-```
-
-See the full [Tool Catalog](LINZA_TOOL_CATALOG.md).
+Imported text is treated as material for analysis, not as an instruction for the agent. This is the prompt-injection boundary: instructions inside an article, log, chat, or PDF are not executed. Memory, rules, and YAML appear only after review.
 
 ---
 
 ## Safety Model
 
-LINZA is a local review-gated sidecar:
+LINZA is a local review-gated sidecar.
 
-- indexing, analysis, search, and import do not change source note bodies;
-- `index_all` and service operations write to `.linza/linza.db`;
-- search may store search history in the sidecar;
-- raw artifacts stay in local SQLite storage;
-- generated reports write only under `.linza/reports`;
-- context packs write only under `.linza/context-packs`;
-- visible YAML edits are compact and require review/apply;
-- hierarchy, causal links, memory, calibr lessons, and approvals stay in the sidecar until the user asks for export or apply;
-- `agent_workspace(action="history")` shows accepted and revoked sidecar decisions;
-- `agent_workspace(action="revoke_approval")` softly revokes an approval: the history remains, but active learning, map, and graph helpers ignore it;
-- source-index preflight stops `map`, `teach`, `grow`, and `connect` when files changed after indexing.
+| Action | Writes To | Changes Note Text? |
+| --- | --- | --- |
+| Indexing, analysis, search | `.linza/linza.db` | No |
+| Raw artifacts | `.linza/linza.db` | No |
+| Material format name | `.linza/linza.db` | No |
+| `domains` or `role` in YAML | Only compact YAML after review | No |
+| Hierarchy, causal links, memory, calibration lessons | `.linza/linza.db` | No |
+| Reports | `.linza/reports` | No |
+| Context packs | `.linza/context-packs` | No |
+| `write_file` | Markdown file only on explicit request | Can create/replace a file, dry-run by default |
 
-LINZA is not a browser automation server, cloud memory, or an autopilot that silently rewrites rules, skills, memory, or notes.
+Additional rules:
+
+- `review_next` writes nothing;
+- `apply_review_items` is dry-run by default;
+- visible YAML edits are compact and require an exact selected ID;
+- `history` shows what was accepted and what was revoked;
+- `revoke_approval` softly revokes an approval: history remains, but active learning and graph helpers ignore it;
+- `map`, `teach`, `grow`, and `connect` stop if source files changed after indexing.
 
 ---
 
@@ -319,36 +306,22 @@ agent-pack/skills/linza-operator/references/safety-policy.md
 agent-pack/skills/linza-operator/references/tool-audience.md
 ```
 
-It tells an agent how to start with `doctor`, when to show review items, how to handle URLs through an external browser/web-fetch tool, and why apply actions must be dry-run first and exact-ID gated.
+It explains to an agent how to start with `doctor`, when to show review intents, how to work with pages through an external browser/web-fetch tool, and why apply actions must first go through dry-run and exact IDs only.
 
 ---
 
 ## Stability
 
-`0.1.9` is an alpha MVP. The main safety contract is meant to be stable: indexing, artifact ingest, search, map, and grow preview do not rewrite source note bodies. Low-level advanced tools and internal module boundaries may still change while the server is being polished.
+LINZA is alpha. The main safety contract should remain stable: indexing, artifact import, search, map, and grow preview do not rewrite source note bodies. Low-level advanced tools and internal code boundaries may still change while the server is being polished.
 
 ---
 
-## Examples and Verification
+## Verification
 
-The synthetic private-safe example pack lives in:
-
-```text
-examples/sample-vault/
-examples/artifacts/
-examples/expected/
-```
-
-Run the full regression suite:
+Run the full test suite:
 
 ```powershell
 python -m unittest discover -s tests
-```
-
-Run one specific test:
-
-```powershell
-python -m unittest tests.test_agent_workspace.AgentWorkspaceTests.test_examples_sample_pack_runs_end_to_end
 ```
 
 ---
@@ -358,15 +331,14 @@ python -m unittest tests.test_agent_workspace.AgentWorkspaceTests.test_examples_
 | Variable | Required for startup? | Description |
 |---|---:|---|
 | `LINZA_VAULT` | No | Path to the Markdown folder; defaults to `./vault` |
-| `LINZA_EMBED_PROVIDER` | No | `lmstudio` for the recommended local setup; `openai` or `ollama` are also supported |
+| `LINZA_EMBED_PROVIDER` | No | `lmstudio` for the recommended local mode; also `openai` and `ollama` |
 | `LINZA_EMBED_URL` | No | Embeddings API URL; defaults to `http://127.0.0.1:1234/v1` |
-| `LINZA_EMBED_MODEL` | No | Embedding model name; set it before semantic indexing/search |
+| `LINZA_EMBED_MODEL` | No | Embedding model; set before semantic indexing/search |
 | `LINZA_EMBED_KEY` | No | Optional key for an OpenAI-compatible embeddings API |
 | `LINZA_BRIDGE_THRESHOLD` | No | Semantic bridge threshold; default `0.55` |
 | `LINZA_MAX_BRIDGE_PAIRS` | No | Maximum note pairs for semantic bridge rebuilds; default `1000000`, `0` disables the guard |
-| `LINZA_DEFAULT_PROFILE` | No | Default search profile name; default `general` |
-| `LINZA_TOOL_SURFACE` | No | `default` (7 tools) or `advanced` |
-| `LINZA_LANGUAGE` | No | Language for guide/status/review-route output in `guide_next_steps`: `auto`, `en`, or `ru` |
+| `LINZA_DEFAULT_PROFILE` | No | Base search profile name; default `general` |
+| `LINZA_LANGUAGE` | No | Language for hints and review route in `guide_next_steps`: `auto`, `ru`, `en` |
 
 ---
 
@@ -376,9 +348,7 @@ python -m unittest tests.test_agent_workspace.AgentWorkspaceTests.test_examples_
 - [PyPI](https://pypi.org/project/linza-mcp/)
 - [GitHub](https://github.com/Semiotronika/LINZA-MCP)
 
-MCP Registry ID: `io.github.Semiotronika/LINZA-MCP`
-
-MIT License © 2026 Semiotronika
+MIT License (c) 2026 Semiotronika
 
 *Cosines are computed. Syntax changes. Semantics remains.*
 

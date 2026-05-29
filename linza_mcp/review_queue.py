@@ -128,7 +128,7 @@ def review_card_display(item: Dict[str, Any]) -> Dict[str, Any]:
     lines = []
     if item.get("id"):
         lines.append(f"Пункт ревью: {item['id']}")
-    lines.append(f"Предложение: {title}")
+    lines.append(f"Интент ревью: {title}")
     question = _display_text(human.get("question"), 220)
     if question:
         lines.append(f"Вопрос: {question}")
@@ -150,7 +150,7 @@ def redacted_queue_display(item: Dict[str, Any]) -> Dict[str, Any]:
     lines = []
     if item.get("id"):
         lines.append(f"Пункт ревью: {item['id']}")
-    lines.append(f"Предложение: проверить {label}")
+    lines.append(f"Интент ревью: проверить {label}")
     question = _display_text(human.get("question"), 220)
     if question:
         lines.append(f"Вопрос: {question}")
@@ -207,23 +207,23 @@ def stage_bucket_order(analysis_stage: str, include_memory: bool) -> tuple[str, 
 def human_review_metadata(kind: str, role: str = "", memory_type: str = "", relation: str = "", type_id: str = "") -> dict[str, Any]:
     """Return the user-facing review contract for a queue item."""
     if kind == "material_type":
-        label = type_id or "найденный тип"
+        label = type_id or "найденный формат"
         return {
             "kind": "material_type",
-            "label": "название типа материала",
-            "question": f"Как назвать найденный тип `{label}` для этой базы?",
-            "user_options": ["назвать тип", "разделить группу", "объединить с другим типом", "пропустить"],
-            "write_preview": "Если принять, LINZA сохранит название типа в `.linza`; Markdown-заметки не меняются. YAML `role` появится только отдельным пунктом ревью после этого.",
+            "label": "название формата материала",
+            "question": f"Как назвать найденный формат `{label}` для этой базы?",
+            "user_options": ["назвать формат", "разделить группу", "объединить с другим форматом", "пропустить"],
+            "write_preview": "Если принять, LINZA сохранит название формата в `.linza`; Markdown-заметки не меняются. YAML `role` появится только отдельным пунктом ревью после этого.",
         }
     if kind == "role":
         role_info = role_review_metadata(role)
         return {
             "kind": "role",
-            "label": "тип материала",
+            "label": "формат материала",
             "question": role_info["question"],
             "role": role_info,
             "material_type": role_info,
-            "user_options": ["принять", "выбрать другой тип", "переименовать тип для этой базы", "пропустить"],
+            "user_options": ["принять", "выбрать другой формат", "переименовать формат для этой базы", "пропустить"],
             "write_preview": role_info["write_preview"],
         }
     if kind == "domain":
@@ -322,7 +322,7 @@ def queue_item_already_resolved(core, item: Dict[str, Any], approved_signatures:
 
 
 def material_type_names_from_storage(storage) -> dict[str, str]:
-    """Return accepted draft type-id -> user type-name mappings."""
+    """Return accepted draft format-id -> user format-name mappings."""
     names: dict[str, str] = {}
     for item in storage.list_approved_items("material_type", limit=1000):
         payload = item.get("payload", {})
@@ -362,10 +362,10 @@ def apply_queue_markdown(items: list[Dict[str, Any]], summary: Dict[str, Any], r
 
     section_titles = {
         "domain": "Domains",
-        "material_type": "Material Type Names",
+        "material_type": "Material Format Names",
         "hierarchy_link": "Hierarchy",
         "memory_item": "Memory",
-        "role": "Material Types",
+        "role": "Material Formats",
         "causal_link": "Cause / Effect Links",
     }
     for kind in ("domain", "material_type", "hierarchy_link", "memory_item", "role", "causal_link"):
@@ -509,7 +509,7 @@ async def build_review_apply_queue(
         ] if part)
         add_item(
             "material_type",
-            f"Название найденного типа: {type_id}",
+            f"Название найденного формата: {type_id}",
             "high" if candidate.get("confidence") == "medium" else "medium",
             candidate.get("why", "LINZA found a reusable material shape in this vault."),
             approval_payload("material_type", type_id=type_id, paths=paths, evidence=evidence),
@@ -573,9 +573,9 @@ async def build_review_apply_queue(
             continue
         add_item(
             "role",
-            f"Тип материала: {note.get('title')}",
+            f"Формат материала: {note.get('title')}",
             "high" if note.get("confidence") == "high" else "medium",
-            f"LINZA inferred this material type from {note.get('reason', 'local evidence')}.",
+            f"LINZA inferred this material format from {note.get('reason', 'local evidence')}.",
             approval_payload("role", path=note.get("path"), role=role),
             paths=[note.get("path", "")],
             evidence=", ".join(str(h) for h in note.get("evidence", {}).get("headings", [])[:3]),
@@ -993,7 +993,7 @@ def approve_material_type_item(
     evidence: str,
     dry_run: bool,
 ) -> Dict[str, Any]:
-    """Accept a user-provided name for a discovered draft material type.
+    """Accept a user-provided name for a discovered draft material format.
 
     This records only the mapping in the sidecar. YAML `role` writes are a
     separate review step so the draft cluster id never becomes user metadata.
@@ -1525,7 +1525,7 @@ async def apply_learned_review_queue(
         },
         "policy": [
             "review mode never selects or applies items automatically.",
-            "assisted mode selects only review items supported by accepted examples and local learning rules.",
+            "assisted mode selects only review intents supported by accepted examples and local learning rules.",
             "autopilot can select more sidecar relations after examples, but still supports dry_run.",
             "Existing note bodies must remain unchanged; source-note content is not rewritten.",
         ],

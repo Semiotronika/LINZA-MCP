@@ -4,12 +4,12 @@ Status: public operator guide, 2026-05-20.
 
 LINZA tools are not meant to be shown to a new user as a flat list. The agent
 should use `guide_next_steps` as the dispatcher, then show a small batch of
-review items.
+review intents.
 
 ## Server Purpose
 
 LINZA MCP is a local semantic sidecar for an agent workspace. It exists to keep
-raw material, derived analysis, review items, accepted memory, and generated
+raw material, derived analysis, review intents, accepted memory, and generated
 context packs in one private SQLite-backed workflow.
 
 It is not primarily:
@@ -22,7 +22,7 @@ It is not primarily:
 
 The product contract is:
 
-`load/index -> analyze -> review items -> explicit apply -> context export`.
+`load/index -> analyze -> review intents -> explicit apply -> context export`.
 
 The user decides meaning and approval. The agent operates the technical tools.
 
@@ -44,7 +44,7 @@ small reviewed path:
 6. What should future agents remember?
 
 Tool names are implementation details for the agent. When LINZA shows a review
-item, the item should answer:
+intent, the card should answer:
 
 - what question the user is deciding;
 - what LINZA proposes in plain language;
@@ -52,11 +52,11 @@ item, the item should answer:
 - what will be written if accepted;
 - how to answer: accept, change, skip, or ask for evidence.
 
-Fresh analysis does not start from a fixed material-type ontology. The
-user-facing concept is "material type"; draft clusters have internal IDs, but
+Fresh analysis does not start from a fixed material-format ontology. The
+user-facing concept is "material format"; draft clusters have internal IDs, but
 those IDs are not written to YAML. The user first names or skips a discovered
-type. Only after that can LINZA offer separate `role` review items that write the
-user-provided name into visible YAML.
+format. Only after that can LINZA offer separate `role` review intents that write
+the user-provided name into visible YAML.
 
 The full technical tool guide is opt-in. `guide_next_steps` should return the
 user-facing `user_view` by default and include raw tool details only when an agent asks
@@ -68,8 +68,7 @@ for `include_tool_guide=true`. Agents should pass `language="en"` or
 LINZA has a compact default MCP surface and a larger advanced compatibility
 surface. The default surface exposes 7 workflow-oriented tools; review queues,
 graph explanation helpers, profiles, specialized report builders, tag/property
-helpers, and older low-level apply tools stay hidden unless
-`LINZA_TOOL_SURFACE=advanced` is set.
+helpers, and older low-level apply tools stay in the separate low-level mode.
 
 The code-level maps live in `linza_mcp/operator.py` as `DEFAULT_MCP_TOOLS`,
 `ADVANCED_MCP_TOOLS`, and `TOOL_AUDIENCE`; tests assert that every tool is
@@ -81,14 +80,14 @@ For a plain-language catalog of every tool and why it exists, see
 User-facing surface:
 
 - `guide_next_steps`: the main user entry point; explains the current stage,
-  plain-language question, what would change, and next review items.
+  plain-language question, what would change, and next review intents.
 - `agent_workspace(action="doctor")`: readiness check presented as a user
   status view.
 - `agent_workspace(action="map")`: compact read-only workspace overview for
   "what is here?" and "what should we look at next?" moments.
 - `agent_workspace(action="grow")`: supervised growth after seed review; the
-  agent previews or applies only review items supported by accepted examples.
-- Review items from `agent_workspace(action="review_next")` or the review
+  agent previews or applies only review intents supported by accepted examples.
+- Review intents from `agent_workspace(action="review_next")` or the review
   queue path include `display`/`human_message`, so the agent can show readable
   text instead of a raw JSON wall.
 - Optional Markdown reports and context packs only when the user asks for a
@@ -119,7 +118,7 @@ workspace, where to start, or what to do next. It returns a compact
 
 Use `agent_workspace(action="grow", mode="assisted")` after the user has
 accepted seed examples. It is the safe way for the agent to keep building the
-knowledge base: dry-run first, select only review items supported by accepted examples,
+knowledge base: dry-run first, select only review intents supported by accepted examples,
 preserve note bodies, and keep high-risk learning behind explicit review.
 
 Internal/optional generated-output surface:
@@ -161,22 +160,22 @@ review.
 
 2. `draft_vault_map`
    - When: after indexing or when the user asks "what is in this vault?"
-   - Does: proposes domains, material types, hierarchy, event flow, lenses, and memory
+   - Does: proposes domains, material formats, hierarchy, event flow, lenses, and memory
      candidates.
    - Writes: nothing.
 
 3. `agent_workspace(action="review_next")` or `build_review_apply_queue`
    - When: after mapping or inbox analysis.
-   - Does: turns draft proposals into stable `rq-*` review items.
+   - Does: turns draft proposals into stable `rq-*` review intents.
    - Writes: nothing unless an optional report is explicitly requested.
    - User output: items include `display` lines and review responses include
      `human_message`.
 
 4. `agent_workspace(action="apply_review_items")` or `approve_review_queue_items`
-   - When: only after the user accepts exact review item IDs.
+   - When: only after the user accepts exact review intent IDs.
    - Does: dry-run preview by default; applies only matched IDs when
      `dry_run=false`.
-   - Writes: material-type naming items write only sidecar approvals; role/domain
+   - Writes: material-format naming intents write only sidecar approvals; role/domain
      items may update compact YAML (`role`, `domains`); hierarchy, causal, and
      memory items write sidecar approvals.
 
@@ -213,7 +212,7 @@ review.
    - Does: wraps learned review selection and optional apply. Default mode is
      `assisted`; default write mode is dry-run.
    - Writes: nothing by default. With `dry_run=false`, applies only the selected
-     learned review items and preserves source note bodies.
+     learned review intents and preserves source note bodies.
 
 For a full base-level check, use the one-command wrapper:
 
@@ -224,17 +223,15 @@ python scripts/linza_doctor.py --source-vault "C:\path\to\your\notes"
 It runs the safe copy-vault and MCP tool smokes, then reports only private-safe
 counts and statuses.
 
-## Example Pack
+## Internal Regression Fixture
 
-Use `examples/` as the public, synthetic demo surface. It contains a small
-sample vault, browser/chat artifacts, an agent trace, and expected safety checks.
-The example is designed to prove the LINZA loop without exposing a private
-vault.
+The repository keeps a small fixture under `tests/fixtures/linza-sample-pack`
+for regression checks. It is not a public demo surface.
 
-Smoke test:
+Fixture smoke test:
 
 ```powershell
-python -m unittest tests.test_agent_workspace.AgentWorkspaceTests.test_examples_sample_pack_runs_end_to_end
+python -m unittest tests.test_agent_workspace.AgentWorkspaceTests.test_internal_sample_pack_runs_end_to_end
 ```
 
 ## Review Order
@@ -246,15 +243,15 @@ Use this order for a new user:
    - Review kind: `domain`
    - Apply result: compact `domains` YAML on representative notes.
 
-2. Material types
+2. Material formats
    - Question: "What should this discovered material group be called?"
    - Review kind: `material_type`
    - Apply result: sidecar mapping from draft cluster ID to user-provided name.
-   - Next: after a type is named, LINZA may show `role` review items for individual
+   - Next: after a format is named, LINZA may show `role` review intents for individual
      notes. Those write compact `role` YAML with the user-provided name, never the draft
      cluster ID.
    - Vocabulary: discovered from this vault. LINZA does not ship built-in
-     material-type labels.
+     material-format labels.
 
 3. Hierarchy
    - Question: "Which note is central, and which notes belong under it?"
@@ -282,9 +279,9 @@ agent can ask for only `domains`, `material_types`, `hierarchy`, `event_flow`,
 `memory`, or `patterns`. `guide_next_steps` uses a focused review window for the
 current stage.
 
-Every review/apply item should carry `evidence_trace`: structured reasons such
+Every review/apply intent should carry `evidence_trace`: structured reasons such
 as representative terms, notes, shape signals, event snippets, relation type,
-scores, or source evidence. If a review item cannot explain itself, it should not be
+scores, or source evidence. If a review intent cannot explain itself, it should not be
 treated as strong.
 
 Pattern items are review-only insight proposals. They currently cover:
@@ -345,24 +342,24 @@ Pattern items are review-only insight proposals. They currently cover:
 ### Review And Apply
 
 - `draft_vault_map`: read-only first-pass semantic map.
-- `build_review_apply_queue`: advanced read-only review items with dry-run
-  payloads and `display` lines.
-- `approve_draft_item`: dry-run by default; applies one review item.
+- `build_review_apply_queue`: advanced read-only review intents with dry-run
+  preview data and `display` lines.
+- `approve_draft_item`: dry-run by default; applies one review intent.
 - `approve_review_queue_items`: dry-run by default; applies exact stable IDs.
-- `apply_learned_review_queue`: dry-run by default; selects review items supported by
+- `apply_learned_review_queue`: dry-run by default; selects review intents supported by
   accepted examples.
 - `list_approved_items`: read active sidecar records; pass `include_revoked=true`
   for audit views.
 
 ### calibr Lens
 
-calibr is the agent-hygiene lens for traces, metrics, and calibration review items. It
+calibr is the agent-hygiene lens for traces, metrics, and calibration review intents. It
 stays inside LINZA and behind review/apply gates:
 
 - raw traces stay immutable;
 - metrics are derived observations;
-- review items propose memory, rule, skill, regression-test, or workflow updates;
-- accepted review items write sidecar approvals first;
+- review intents propose memory, rule, skill, regression-test, or workflow updates;
+- accepted review intents write sidecar approvals first;
 - active rules, skills, code, and source notes require explicit separate apply.
 
 Current entry points are actions inside `agent_workspace`, not separate MCP
