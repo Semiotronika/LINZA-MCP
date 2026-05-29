@@ -324,6 +324,25 @@ class OperatorSurfaceTests(OperatorTestCase):
             server.storage.close()
             tmp.cleanup()
 
+    def test_mcp_initialization_options_advertise_tool_capabilities(self):
+        from linza_mcp.compat import __version__
+        from linza_mcp.server import LinzaMCPServer
+
+        tmp = tempfile.TemporaryDirectory()
+        vault = Path(tmp.name)
+        server = LinzaMCPServer(vault, StableTestEmbeddingProvider(), {"default_profile": "general"})
+        try:
+            options = server._initialization_options()
+
+            self.assertEqual(options.server_name, "linza-mcp")
+            self.assertEqual(options.server_version, __version__)
+            self.assertIsNotNone(options.capabilities.tools)
+            self.assertIsNone(options.capabilities.resources)
+            self.assertIsNone(options.capabilities.prompts)
+        finally:
+            server.storage.close()
+            tmp.cleanup()
+
     def test_guide_next_steps_renders_localized_human_view(self):
         tmp, vault, storage, core = self.make_core()
         try:

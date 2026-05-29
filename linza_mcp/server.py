@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 import anyio
-from mcp.server import Server
+from mcp.server import NotificationOptions, Server
 import mcp.server.stdio
 from mcp.server.models import InitializationOptions
 from mcp.types import CallToolResult, TextContent, Tool
@@ -707,8 +707,18 @@ class LinzaMCPServer:
             await self.server.run(
                 read_stream,
                 write_stream,
-                InitializationOptions(server_name="linza-mcp", server_version=__version__),
+                self._initialization_options(),
             )
+
+    def _initialization_options(self) -> InitializationOptions:
+        return InitializationOptions(
+            server_name="linza-mcp",
+            server_version=__version__,
+            capabilities=self.server.get_capabilities(
+                notification_options=NotificationOptions(),
+                experimental_capabilities={},
+            ),
+        )
 
 
 def _report_schema(default_path: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:

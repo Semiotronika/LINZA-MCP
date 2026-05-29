@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.8 - 2026-05-29
+
+### Fixed
+
+- Added MCP server capabilities to stdio initialization so LINZA starts with
+  current Python MCP SDK releases that require `InitializationOptions.capabilities`.
+
 ## 0.1.7 - 2026-05-29
 
 ### Fixed
