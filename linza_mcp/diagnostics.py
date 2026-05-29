@@ -302,7 +302,7 @@ def build_review_queue_markdown(core, limit: int = 30) -> str:
         "",
         "## Why Links Matter",
         "",
-        "- Links make related notes available to humans and agents without loading the whole vault.",
+        "- Links make related notes available to users and agents without loading the whole vault.",
         "- A link is a decision: same topic, evidence, dependency, duplicate, or next action.",
         "- LINZA suggestions are candidates. Accept only the ones that still make sense when you read both notes.",
         "",
@@ -496,7 +496,7 @@ def build_bases_plan_markdown(core) -> str:
         "",
         "## Property Policy",
         "",
-        "- LINZA writes only small human-facing YAML properties by default.",
+        "- LINZA writes only small user-facing YAML properties by default.",
         "- Existing user/project fields stay untouched unless the user explicitly asks for plain YAML edits.",
         "- Existing LINZA properties stay untouched unless the user approves overwrite.",
         "- Properties should stay small and machine-readable; longer explanation belongs in note body.",
@@ -561,11 +561,11 @@ def suggest_properties_for_note(core, path: str) -> Dict[str, Any]:
         "yaml_patch": yaml_patch,
         "yaml_preview": format_yaml_block(yaml_patch) if yaml_patch else "",
         "yaml_schema": {
-            "role": "accepted human material type name discovered and named for this vault",
+            "role": "accepted user material type name discovered and named for this vault",
             "confidence": "optional confidence for machine suggestions",
             "domains": "reviewed domain labels",
         },
-        "write_policy": "read-only suggestion; write only small human-facing YAML properties after user approval",
+        "write_policy": "read-only suggestion; write only small user-facing YAML properties after user approval",
     }
 
 
@@ -583,7 +583,7 @@ def build_yaml_suggestions_markdown(core, limit: int = 50) -> str:
     lines = [
         "# LINZA YAML Suggestions",
         "",
-        "These are proposed human-facing YAML properties. This report does not modify notes.",
+        "These are proposed user-facing YAML properties. This report does not modify notes.",
         "",
         "LINZA YAML stores only compact reviewed material type/domain hints; processing state, temporary link candidates, and embedding scores stay in reports or `.linza/linza.db`.",
         "",

@@ -16,7 +16,7 @@ It is not primarily:
 
 - an Obsidian plugin;
 - a browser automation server;
-- a flat toolbox that the human should operate by name;
+- a flat toolbox that the user should operate by name;
 - an unreviewed autopilot that rewrites notes, skills, rules, or memory because
   it noticed something in an imported artifact.
 
@@ -24,14 +24,14 @@ The product contract is:
 
 `load/index -> analyze -> review items -> explicit apply -> context export`.
 
-The human decides meaning and approval. The agent operates the technical tools.
+The user decides meaning and approval. The agent operates the technical tools.
 
 Artifacts include notes, `.txt`, `.json`, `.docx`, `.xlsx`, chats, browser
 exports, research dumps, pasted logs, traces, and PDF text extracted through an
 optional local PDF extractor. Document ingestion preserves source metadata and
 hash evidence before review.
 
-## Human Layer First
+## User Layer First
 
 A new user should not need to know MCP tool names. The primary interface is a
 small reviewed path:
@@ -56,12 +56,12 @@ Fresh analysis does not start from a fixed material-type ontology. The
 user-facing concept is "material type"; draft clusters have internal IDs, but
 those IDs are not written to YAML. The user first names or skips a discovered
 type. Only after that can LINZA offer separate `role` review items that write the
-human name into visible YAML.
+user-provided name into visible YAML.
 
 The full technical tool guide is opt-in. `guide_next_steps` should return the
-human `user_view` by default and include raw tool details only when an agent asks
+user-facing `user_view` by default and include raw tool details only when an agent asks
 for `include_tool_guide=true`. Agents should pass `language="en"` or
-`language="ru"` when the human language is known.
+`language="ru"` when the user language is known.
 
 ## Audience Contract
 
@@ -78,11 +78,11 @@ classified.
 For a plain-language catalog of every tool and why it exists, see
 `LINZA_TOOL_CATALOG.md`.
 
-Human-facing surface:
+User-facing surface:
 
-- `guide_next_steps`: the main human entry point; explains the current stage,
+- `guide_next_steps`: the main user entry point; explains the current stage,
   plain-language question, what would change, and next review items.
-- `agent_workspace(action="doctor")`: readiness check presented as a human
+- `agent_workspace(action="doctor")`: readiness check presented as a user
   status view.
 - `agent_workspace(action="map")`: compact read-only workspace overview for
   "what is here?" and "what should we look at next?" moments.
@@ -91,7 +91,7 @@ Human-facing surface:
 - Review items from `agent_workspace(action="review_next")` or the review
   queue path include `display`/`human_message`, so the agent can show readable
   text instead of a raw JSON wall.
-- Optional Markdown reports and context packs only when the human asks for a
+- Optional Markdown reports and context packs only when the user asks for a
   saved artifact.
 
 Agent-facing surface:
@@ -108,16 +108,16 @@ Agent-facing surface:
   `show_flow`, `who_depends`, `explain_relationship`, and
   `create_context_pack` are advanced compatibility tools.
 
-Use `agent_workspace(action="connect", source="A", target="B")` when the human
+Use `agent_workspace(action="connect", source="A", target="B")` when the user
 asks what connects two notes or ideas. It wraps `show_flow` and
 `explain_relationship`, labels evidence as `EXTRACTED`, `INFERRED`, `APPROVED`,
 or `AMBIGUOUS`, and writes nothing.
 
-Use `agent_workspace(action="map")` when the human asks what is in the
+Use `agent_workspace(action="map")` when the user asks what is in the
 workspace, where to start, or what to do next. It returns a compact
 `human_view`, an agent-oriented `workspace_map`, and writes nothing.
 
-Use `agent_workspace(action="grow", mode="assisted")` after the human has
+Use `agent_workspace(action="grow", mode="assisted")` after the user has
 accepted seed examples. It is the safe way for the agent to keep building the
 knowledge base: dry-run first, select only review items supported by accepted examples,
 preserve note bodies, and keep high-risk learning behind explicit review.
@@ -126,7 +126,7 @@ Internal/optional generated-output surface:
 
 - Report builders and `create_context_pack` are generated artifacts. When
   written, they are restricted to `.linza/reports` or `.linza/context-packs`;
-  they should not create visible vault clutter or overwrite human notes.
+  they should not create visible vault clutter or overwrite user notes.
 - Profiles, tag helpers, property patch helpers, specialized reports, and
   legacy low-level apply helpers are advanced/internal. They are not part of the
   normal v0 operator surface.
@@ -169,7 +169,7 @@ review.
    - When: after mapping or inbox analysis.
    - Does: turns draft proposals into stable `rq-*` review items.
    - Writes: nothing unless an optional report is explicitly requested.
-   - Human output: items include `display` lines and review responses include
+   - User output: items include `display` lines and review responses include
      `human_message`.
 
 4. `agent_workspace(action="apply_review_items")` or `approve_review_queue_items`
@@ -196,7 +196,7 @@ review.
 7. `agent_workspace(action="doctor")`
    - When: before trusting a LINZA session, after a server update, or when the
      user asks whether the workspace is healthy.
-   - Does: returns one human-readable readiness view over SQLite, artifacts,
+   - Does: returns one user-readable readiness view over SQLite, artifacts,
      review gates, calibr, and source-note safety.
    - Writes: nothing.
 
@@ -249,9 +249,9 @@ Use this order for a new user:
 2. Material types
    - Question: "What should this discovered material group be called?"
    - Review kind: `material_type`
-   - Apply result: sidecar mapping from draft cluster ID to human name.
+   - Apply result: sidecar mapping from draft cluster ID to user-provided name.
    - Next: after a type is named, LINZA may show `role` review items for individual
-     notes. Those write compact `role` YAML with the human name, never the draft
+     notes. Those write compact `role` YAML with the user-provided name, never the draft
      cluster ID.
    - Vocabulary: discovered from this vault. LINZA does not ship built-in
      material-type labels.
@@ -299,15 +299,15 @@ Pattern items are review-only insight proposals. They currently cover:
      learns from this run?"
    - Review kind: `calibr_card`.
    - Apply result: sidecar approval for memory/rule/skill/regression candidates,
-     or a human task. No active skill, code, or note-body write happens directly.
+     or a user task. No active skill, code, or note-body write happens directly.
    - Important: calibr observes traces; it does not believe or rewrite itself.
 
 ## Tool Map
 
 ### Status And Navigation
 
-- `agent_workspace(action="doctor")`: read-only human readiness check.
-- `agent_workspace(action="map")`: read-only human and agent workspace
+- `agent_workspace(action="doctor")`: read-only user readiness check.
+- `agent_workspace(action="map")`: read-only user and agent workspace
   snapshot.
 - `agent_workspace(action="grow")`: dry-run-first supervised knowledge-base
   growth from accepted seed examples.
@@ -369,7 +369,7 @@ Current entry points are actions inside `agent_workspace`, not separate MCP
 tools: `record_trace`, `analyze_trace`, and `review_calibr`. A recorded trace
 is also stored as a `calibr_trace` artifact, so normal LINZA inbox analysis,
 chunk search, and context export can include it without a separate calibr silo.
-The `doctor` action includes calibr readiness in the same human status view.
+The `doctor` action includes calibr readiness in the same user status view.
 
 ### Tags
 

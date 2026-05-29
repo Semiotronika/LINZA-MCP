@@ -182,7 +182,7 @@ class LinzaMCPServer:
                     "max_candidates": {"type": "integer", "default": 20},
                     "include_new": {"type": "boolean", "default": True},
                 }, ["path"]),
-                _tool("suggest_properties", "Suggest compact human-facing YAML for one note.", {"path": {"type": "string"}}, ["path"]),
+                _tool("suggest_properties", "Suggest compact user-facing YAML for one note.", {"path": {"type": "string"}}, ["path"]),
                 _tool("patch_properties", "Safely patch compact YAML/frontmatter for one note. Dry-run by default.", {
                     "path": {"type": "string"},
                     "properties": {"type": "object"},
@@ -295,7 +295,7 @@ class LinzaMCPServer:
                 _tool("build_bases_plan", "Build an Obsidian Bases plan report.", _report_schema(REPORT_DEFAULTS["bases_plan"])),
                 _tool("build_yaml_suggestions", "Build a LINZA YAML suggestions report.", _report_schema(REPORT_DEFAULTS["yaml_suggestions"], {"limit": {"type": "integer", "default": 50}})),
                 _tool("build_tag_vocabulary_report", "Build a tag vocabulary report.", _report_schema(REPORT_DEFAULTS["tag_vocabulary"])),
-                _tool("build_review_queue", "Build a human-readable review queue.", _report_schema(REPORT_DEFAULTS["review_queue"], {"limit": {"type": "integer", "default": 30}})),
+                _tool("build_review_queue", "Build a user-readable review queue.", _report_schema(REPORT_DEFAULTS["review_queue"], {"limit": {"type": "integer", "default": 30}})),
                 _tool("build_review_apply_queue", "Build a review/apply queue with dry-run approval payloads.", _report_schema(REPORT_DEFAULTS["review_apply_queue"], {
                     "max_notes": {"type": "integer", "default": 120},
                     "max_domains": {"type": "integer", "default": 8},

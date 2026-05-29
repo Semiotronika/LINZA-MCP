@@ -7,7 +7,7 @@ The default MCP `tools/list` is intentionally compact and is defined by
 development, but are hidden unless the server is started with
 `LINZA_TOOL_SURFACE=advanced`.
 
-## Human Entry
+## User Entry
 
 - `guide_next_steps`
 - `agent_workspace(action="doctor")`

@@ -6,7 +6,7 @@ developers, CI, and careful local smoke checks.
 
 | Script | Purpose |
 | --- | --- |
-| `linza_doctor.py` | Human-readable health check over safe smoke checks. |
+| `linza_doctor.py` | User-readable health check over safe smoke checks. |
 | `smoke_mcp_tools.py` | Smoke every MCP tool on a temporary Markdown-only vault copy. |
 | `smoke_copy_vault.py` | Run a private-output-safe smoke test against a copied vault. |
 | `demo_core.ps1` | Optional local demo of core read/review flows. |

@@ -47,7 +47,7 @@ def patch_note_properties(
         "skipped": skipped,
         "body_preserved": True,
         "namespace": namespace,
-        "yaml_style": "human-facing flat properties",
+        "yaml_style": "user-facing flat properties",
         "legacy_graph_metadata_detected": is_legacy_graph_metadata(metadata),
         "protected_fields": ["sign", "level", "parents", "parents_meta", "artifact_sign"],
     }

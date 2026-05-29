@@ -13,7 +13,7 @@ LINZA works with Obsidian, Markdown folders, documents, articles, chats, logs, a
 
 LINZA reads a folder, builds a local SQLite sidecar at `.linza/linza.db`, and gives the agent a working map: which themes exist, which material types repeat, which notes may be connected, where cause/effect chains appear, and what future sessions may need to remember.
 
-Your source files remain yours. LINZA does not rewrite notes during indexing, does not turn a raw log into a rule, and does not teach the agent behind your back. It turns hypotheses into short review items: the human decides, the agent executes.
+Your source files remain yours. LINZA does not rewrite notes during indexing, does not turn a raw log into a rule, and does not teach the agent behind your back. It turns hypotheses into short review items: the user decides, the agent executes.
 
 ---
 
@@ -37,7 +37,7 @@ doctor -> index -> map -> review items -> teach -> grow preview -> explicit appl
 
 ---
 
-## What Appears After The First Run
+## What Appears After the First Run
 
 LINZA does not try to become the owner of your knowledge base. It collects a few concrete things that help agents work more calmly.
 
@@ -45,7 +45,7 @@ LINZA does not try to become the owner of your knowledge base. It collects a few
    How many notes were found, whether the index is fresh, which areas are visible, and which materials are waiting for review.
 
 2. **Areas**
-   Broad semantic groups. Their names are drafts until a human accepts or renames them.
+   Broad semantic groups. Their names are drafts until the user accepts or renames them.
 
 3. **Material types**
    Notes, drafts, specifications, research notes, cases, logs, rules, and other recurring forms found in the folder.
@@ -63,7 +63,7 @@ LINZA does not try to become the owner of your knowledge base. It collects a few
 
 ## What Review Looks Like
 
-LINZA tries not to show a human raw JSON or a long tool list. A normal first response should look more like this:
+LINZA tries not to show the user raw JSON or a long tool list. A normal first response should look more like this:
 
 Internally, each review item is still structured data with an ID, evidence, and a preview/apply payload. Externally, LINZA returns ready-to-display lines through `display` and `human_message`, so an agent can write a clean answer instead of dumping JSON.
 
@@ -86,7 +86,7 @@ Why: shared vocabulary, review-flow references, nearby chunks
 Write impact: none yet; accepting records a sidecar relation
 ```
 
-A good review item always answers the human question: **why does LINZA think this?** It should carry sources, snippets/chunks, relation type, confidence, and a clear write impact.
+A good review item always answers the user's question: **why does LINZA think this?** It should carry sources, snippets/chunks, relation type, confidence, and a clear write impact.
 
 ---
 
@@ -142,9 +142,6 @@ Claude Desktop, Cursor, OpenCode, and other MCP clients usually use this format:
       "command": "linza-mcp",
       "env": {
         "LINZA_VAULT": "/absolute/path/to/workspace-or-vault",
-        "LINZA_EMBED_PROVIDER": "lmstudio",
-        "LINZA_EMBED_URL": "http://127.0.0.1:1234/v1",
-        "LINZA_EMBED_MODEL": "your-embedding-model-name",
         "LINZA_TOOL_SURFACE": "default"
       }
     }
@@ -161,13 +158,22 @@ VS Code / Copilot MCP uses `servers`:
       "type": "stdio",
       "command": "linza-mcp",
       "env": {
-        "LINZA_VAULT": "/absolute/path/to/workspace-or-vault",
-        "LINZA_EMBED_PROVIDER": "lmstudio",
-        "LINZA_EMBED_URL": "http://127.0.0.1:1234/v1",
-        "LINZA_EMBED_MODEL": "your-embedding-model-name"
+        "LINZA_VAULT": "/absolute/path/to/workspace-or-vault"
       }
     }
   }
+}
+```
+
+That is the minimum startup config. LINZA can start and list tools without an
+embedding server. Add the embedding variables when you want semantic search,
+topic maps, and link suggestions:
+
+```json
+{
+  "LINZA_EMBED_PROVIDER": "lmstudio",
+  "LINZA_EMBED_URL": "http://127.0.0.1:1234/v1",
+  "LINZA_EMBED_MODEL": "your-embedding-model-name"
 }
 ```
 
@@ -293,7 +299,7 @@ LINZA is a local review-gated sidecar:
 - generated reports write only under `.linza/reports`;
 - context packs write only under `.linza/context-packs`;
 - visible YAML edits are compact and require review/apply;
-- hierarchy, causal links, memory, calibr lessons, and approvals stay in the sidecar until the human asks for export or apply;
+- hierarchy, causal links, memory, calibr lessons, and approvals stay in the sidecar until the user asks for export or apply;
 - `agent_workspace(action="history")` shows accepted and revoked sidecar decisions;
 - `agent_workspace(action="revoke_approval")` softly revokes an approval: the history remains, but active learning, map, and graph helpers ignore it;
 - source-index preflight stops `map`, `teach`, `grow`, and `connect` when files changed after indexing.
@@ -319,11 +325,11 @@ It tells an agent how to start with `doctor`, when to show review items, how to 
 
 ## Stability
 
-`0.1.8` is an alpha MVP. The main safety contract is meant to be stable: indexing, artifact ingest, search, map, and grow preview do not rewrite source note bodies. Low-level advanced tools and internal module boundaries may still change while the server is being polished.
+`0.1.9` is an alpha MVP. The main safety contract is meant to be stable: indexing, artifact ingest, search, map, and grow preview do not rewrite source note bodies. Low-level advanced tools and internal module boundaries may still change while the server is being polished.
 
 ---
 
-## Example And Verification
+## Examples and Verification
 
 The synthetic private-safe example pack lives in:
 
@@ -349,18 +355,18 @@ python -m unittest tests.test_agent_workspace.AgentWorkspaceTests.test_examples_
 
 ## Environment Variables
 
-| Variable | Description |
-|---|---|
-| `LINZA_VAULT` | Path to the Markdown folder |
-| `LINZA_EMBED_PROVIDER` | `lmstudio` for the recommended local setup; `openai` or `ollama` are also supported |
-| `LINZA_EMBED_URL` | Embeddings API URL |
-| `LINZA_EMBED_MODEL` | Embedding model name |
-| `LINZA_EMBED_KEY` | Optional key for an OpenAI-compatible embeddings API |
-| `LINZA_BRIDGE_THRESHOLD` | Semantic bridge threshold; default `0.55` |
-| `LINZA_MAX_BRIDGE_PAIRS` | Maximum note pairs for semantic bridge rebuilds; default `1000000`, `0` disables the guard |
-| `LINZA_DEFAULT_PROFILE` | Default search profile name; default `general` |
-| `LINZA_TOOL_SURFACE` | `default` (7 tools) or `advanced` |
-| `LINZA_LANGUAGE` | Language for guide/status/review-route output in `guide_next_steps`: `auto`, `en`, or `ru` |
+| Variable | Required for startup? | Description |
+|---|---:|---|
+| `LINZA_VAULT` | No | Path to the Markdown folder; defaults to `./vault` |
+| `LINZA_EMBED_PROVIDER` | No | `lmstudio` for the recommended local setup; `openai` or `ollama` are also supported |
+| `LINZA_EMBED_URL` | No | Embeddings API URL; defaults to `http://127.0.0.1:1234/v1` |
+| `LINZA_EMBED_MODEL` | No | Embedding model name; set it before semantic indexing/search |
+| `LINZA_EMBED_KEY` | No | Optional key for an OpenAI-compatible embeddings API |
+| `LINZA_BRIDGE_THRESHOLD` | No | Semantic bridge threshold; default `0.55` |
+| `LINZA_MAX_BRIDGE_PAIRS` | No | Maximum note pairs for semantic bridge rebuilds; default `1000000`, `0` disables the guard |
+| `LINZA_DEFAULT_PROFILE` | No | Default search profile name; default `general` |
+| `LINZA_TOOL_SURFACE` | No | `default` (7 tools) or `advanced` |
+| `LINZA_LANGUAGE` | No | Language for guide/status/review-route output in `guide_next_steps`: `auto`, `en`, or `ru` |
 
 ---
 

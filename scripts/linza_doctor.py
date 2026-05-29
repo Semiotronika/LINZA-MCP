@@ -1,4 +1,4 @@
-"""Human-readable LINZA doctor over the safe copy-vault smoke checks.
+"""User-readable LINZA doctor over the safe copy-vault smoke checks.
 
 The command is private-output safe: it reports counts and statuses only, never
 note text, titles, generated domains, or source paths from the vault.
@@ -80,7 +80,7 @@ async def run_doctor(
             "agent_workspace_facade",
             "Agent workspace facade",
             "ok",
-            "The smoke run exercises the small artifact/calibr workflow instead of exposing raw tools to a human.",
+            "The smoke run exercises the small artifact/calibr workflow instead of exposing raw tools to a user.",
         ),
     ]
     has_failure = any(item["status"] == "fail" for item in checks)

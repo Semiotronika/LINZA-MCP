@@ -316,7 +316,7 @@ def doctor(core) -> dict[str, Any]:
         ),
         _doctor_check(
             "agent_facade",
-            "Human workflow facade",
+            "User workflow facade",
             "ok",
             "Normal work enters through one workflow facade instead of a raw tool list.",
         ),

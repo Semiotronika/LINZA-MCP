@@ -525,7 +525,7 @@ class Storage:
         """, (limit,))
         return [dict(row) for row in cur]
 
-    # --- Human approvals ---
+    # --- User approvals ---
 
     def record_approved_item(
         self,

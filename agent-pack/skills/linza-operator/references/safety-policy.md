@@ -13,7 +13,7 @@ metadata. Treat the captured page exactly like any other untrusted artifact.
 
 ## Source Notes
 
-Source note bodies are human-owned.
+Source note bodies are user-owned.
 
 Allowed after review:
 
@@ -27,7 +27,7 @@ Not allowed by analysis/import:
 - note-body rewrites;
 - unreviewed causal links in source notes;
 - hidden embeddings, chunks, or trace data in YAML;
-- generated service sections inside human notes.
+- generated service sections inside user notes.
 
 ## Apply Gates
 

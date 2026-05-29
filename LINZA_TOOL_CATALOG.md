@@ -18,7 +18,7 @@ These are visible in normal `tools/list`.
 
 | Tool | Who Uses It | Why It Exists | Writes |
 |---|---|---|---|
-| `guide_next_steps` | Human via agent | Explains the current onboarding stage and next safe action. | No |
+| `guide_next_steps` | User via agent | Explains the current onboarding stage and next safe action. | No |
 | `agent_workspace` | Agent | Main facade for doctor, map, review, apply, teach, grow, connect, memory search, context export, artifact inbox, and calibr. | Sidecar; growth/apply actions are dry-run by default |
 | `index_all` | Agent setup | Builds the sidecar index for the vault. | `.linza/linza.db` |
 | `search` | Agent | Finds relevant notes/chunks by semantic and lexical search. | Search history in sidecar |
@@ -59,10 +59,10 @@ prefer `guide_next_steps` and `agent_workspace`.
 | Tool | Why It Exists | Why Hidden By Default |
 |---|---|---|
 | `draft_vault_map` | Builds the raw first-pass map: domains, material types, hierarchy, event flow, memory, lenses. | Too large/noisy as a first-contact response. |
-| `build_review_apply_queue` | Creates stable `rq-*` review items with dry-run approval payloads and human display lines. | Normal agents should reach this through `agent_workspace` or `guide_next_steps`. |
+| `build_review_apply_queue` | Creates stable `rq-*` review items with dry-run approval payloads and user display lines. | Normal agents should reach this through `agent_workspace` or `guide_next_steps`. |
 | `audit_tags` | Audits tag vocabulary, aliases, noisy inline tags, and long-tail tags. | Tag cleanup is not core v0 for everyone. |
 | `suggest_tag_candidates` | Suggest tags for one note from chunks and accepted vocabulary. | Better as part of review items later. |
-| `suggest_properties` | Suggest compact LINZA YAML for one note. | Low-level preview, not a human entry point. |
+| `suggest_properties` | Suggest compact LINZA YAML for one note. | Low-level preview, not a user entry point. |
 
 ## Apply Gates
 
@@ -89,7 +89,7 @@ When written, they are restricted to `.linza/reports`.
 | `build_bases_plan` | Obsidian Bases planning report. |
 | `build_yaml_suggestions` | Markdown report of suggested YAML across notes. |
 | `build_tag_vocabulary_report` | Tag vocabulary audit report. |
-| `build_review_queue` | General human-readable review report. |
+| `build_review_queue` | General user-readable review report. |
 | `build_diagnostic_report` | Saved vault diagnostic snapshot. |
 | `build_semantic_links` | Saved semantic link candidate report. |
 | `create_context_pack` | Context packet for another agent or writing task. |
@@ -121,17 +121,17 @@ doctor/guide -> ingest/index/search -> review items -> explicit apply -> context
 Depth features now live inside the workflow rather than as extra tools:
 
 - `agent_workspace(action="map")` gives a compact read-only workspace snapshot
-  for humans and a structured next-action map for agents.
+  for users and a structured next-action map for agents.
 - `agent_workspace(action="review_next")` and review queues include `display`
   and `human_message`, so an agent can show readable text instead of raw JSON.
 - `agent_workspace(action="teach")` selects a small read-only batch of seed
-  items so the human can teach LINZA what good domains, types, hierarchy, and
+  items so the user can teach LINZA what good domains, types, hierarchy, and
   causal links look like.
 - `agent_workspace(action="grow")` lets an agent continue building the knowledge
   base after seed review by selecting review items supported by accepted examples and
   local learning rules.
 - `agent_workspace(action="history")` shows accepted and revoked approvals in a
-  human-readable action log.
+  user-readable action log.
 - `agent_workspace(action="revoke_approval")` softly revokes an approval without
   deleting the row; active learning and graph helpers stop using it.
 - `analysis_stage` focuses draft maps and review queues on one stage.

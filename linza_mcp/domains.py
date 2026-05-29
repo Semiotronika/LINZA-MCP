@@ -80,7 +80,7 @@ def domain_terms(
 
 
 def dedupe_draft_domain_names(domains: list[dict[str, Any]]) -> None:
-    """Choose unique human display names for draft domains in place."""
+    """Choose unique user display names for draft domains in place."""
     used: set[str] = set()
     for domain in domains:
         candidates = list(domain.get("name_candidates", []))

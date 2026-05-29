@@ -92,7 +92,7 @@ STAGE_PRESENTATION_EN = {
     "review_roles": {
         "title": "Review material types",
         "question": "What kinds of material are actually present here, and how should they be named?",
-        "plain_next": "LINZA first shows discovered material groups and asks for a human name. Only after that does it create separate review items for writing `role` into YAML.",
+        "plain_next": "LINZA first shows discovered material groups and asks for a user-provided name. Only after that does it create separate review items for writing `role` into YAML.",
         "writes": "The material-type name is stored in `.linza` first. Visible YAML `role: ...` appears only through a separate approved item. Note bodies are not changed.",
     },
     "review_hierarchy": {
@@ -330,7 +330,7 @@ TOOL_GUIDE = {
     },
     "build_review_queue": {
         "when": "When reviewing general vault health/action items.",
-        "does": "Builds a human-readable review queue report.",
+        "does": "Builds a user-readable review queue report.",
         "default_mode": "read_only unless write=true",
         "write_scope": ".linza/reports by default when write=true",
     },

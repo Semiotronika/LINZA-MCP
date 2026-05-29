@@ -275,7 +275,7 @@ def build_event_flow_draft(
                 "scope": "cross_note",
                 "shared_domain_ids": [domain_id],
                 "confidence": "draft",
-                "why": "Events share a draft domain and appear in a compatible order across notes; human review is required before treating this as causal.",
+                "why": "Events share a draft domain and appear in a compatible order across notes; user review is required before treating this as causal.",
             })
 
     return {
@@ -702,7 +702,7 @@ def build_lens_suggestions(
         {
             "id": "verify",
             "label": "Проверить",
-            "purpose": "Find weak evidence, contradictions, broken links, thin notes, and items needing human judgement.",
+            "purpose": "Find weak evidence, contradictions, broken links, thin notes, and items needing user judgement.",
             "uses": ["review_queue", "event_confidence", "diagnostics"],
             "signals": {"review_items": len(review_queue)},
         },
@@ -1221,7 +1221,7 @@ async def draft_vault_map(
                 "type": "ambiguous_domain",
                 "path": path,
                 "domains": domain_ids,
-                "why": "This note fits several draft areas; human naming or parent choice is needed.",
+                "why": "This note fits several draft areas; user naming or parent choice is needed.",
             })
     domainless = [record for record in records if record["path"] not in assigned_to]
     for record in domainless[:20]:

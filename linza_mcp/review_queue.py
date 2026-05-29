@@ -119,7 +119,7 @@ def _display_basis(item: Dict[str, Any]) -> str:
     ]
     if labels:
         return f"есть признаки: {', '.join(labels)}"
-    return "есть локальные признаки, которые стоит проверить человеком"
+    return "есть локальные признаки, которые стоит проверить пользователем"
 
 
 def review_card_display(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -322,7 +322,7 @@ def queue_item_already_resolved(core, item: Dict[str, Any], approved_signatures:
 
 
 def material_type_names_from_storage(storage) -> dict[str, str]:
-    """Return accepted draft type-id -> human type-name mappings."""
+    """Return accepted draft type-id -> user type-name mappings."""
     names: dict[str, str] = {}
     for item in storage.list_approved_items("material_type", limit=1000):
         payload = item.get("payload", {})
@@ -337,7 +337,7 @@ def apply_queue_markdown(items: list[Dict[str, Any]], summary: Dict[str, Any], r
     lines = [
         "# LINZA Review / Apply Queue" + (" (Redacted)" if redact else ""),
         "",
-        "This is a human review queue. It does not change source notes.",
+        "This is a user review queue. It does not change source notes.",
     ]
     if redact:
         lines.extend([
@@ -423,7 +423,7 @@ async def build_review_apply_queue(
     include_memory: bool = False,
     analysis_stage: str = "all",
 ) -> Dict[str, Any]:
-    """Build a human-readable apply queue from the draft map. Read-only."""
+    """Build a user-readable apply queue from the draft map. Read-only."""
     limit = max(1, int(limit))
     requested_stage = normalize_analysis_stage(analysis_stage)
     draft = await core.draft_vault_map(
@@ -543,7 +543,7 @@ async def build_review_apply_queue(
             "hierarchy_link",
             f"Главная заметка для области: {parent.get('title')}",
             "medium",
-            "LINZA found a central note candidate for this draft domain. Accept only if this parent-child grouping matches the human map.",
+            "LINZA found a central note candidate for this draft domain. Accept only if this parent-child grouping matches the user's map.",
             approval_payload(
                 "hierarchy_link",
                 parent_path=parent_path,
@@ -993,7 +993,7 @@ def approve_material_type_item(
     evidence: str,
     dry_run: bool,
 ) -> Dict[str, Any]:
-    """Accept a human name for a discovered draft material type.
+    """Accept a user-provided name for a discovered draft material type.
 
     This records only the mapping in the sidecar. YAML `role` writes are a
     separate review step so the draft cluster id never becomes user metadata.

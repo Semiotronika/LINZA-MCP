@@ -7,12 +7,12 @@
     "url": "https://github.com/Semiotronika/LINZA-MCP",
     "source": "github"
   },
-  "version": "0.1.8",
+  "version": "0.1.9",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "linza-mcp",
-      "version": "0.1.8",
+      "version": "0.1.9",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
@@ -20,9 +20,10 @@
       "environmentVariables": [
         {
           "name": "LINZA_VAULT",
-          "description": "Absolute path to the Markdown workspace or vault LINZA may index.",
-          "isRequired": true,
-          "format": "string"
+          "description": "Absolute path to the Markdown workspace or vault LINZA may index. Defaults to ./vault.",
+          "isRequired": false,
+          "format": "string",
+          "default": "./vault"
         },
         {
           "name": "LINZA_EMBED_PROVIDER",
@@ -75,7 +76,7 @@
         },
         {
           "name": "LINZA_LANGUAGE",
-          "description": "Human-facing guide language. Allowed values: auto, en, ru. Default: auto.",
+          "description": "User-facing guide language. Allowed values: auto, en, ru. Default: auto.",
           "isRequired": false,
           "format": "string"
         }

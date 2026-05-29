@@ -5,7 +5,6 @@ include Dockerfile
 include .dockerignore
 include SECURITY.md
 include CHANGELOG.md
-include CONTRIBUTING.md
 include server.json
 include glama.json
 include LINZA_TOOL_CATALOG.md

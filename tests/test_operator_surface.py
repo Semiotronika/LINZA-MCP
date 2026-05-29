@@ -458,7 +458,6 @@ class OperatorSurfaceTests(OperatorTestCase):
             root / "LICENSE",
             root / "SECURITY.md",
             root / "CHANGELOG.md",
-            root / "CONTRIBUTING.md",
             root / "server.json",
             root / "glama.json",
             root / "LINZA_TOOL_CATALOG.md",
@@ -544,7 +543,6 @@ class OperatorSurfaceTests(OperatorTestCase):
         manifest = (root / "MANIFEST.in").read_text(encoding="utf-8")
         self.assertIn("include Dockerfile", manifest)
         self.assertIn("include .dockerignore", manifest)
-        self.assertIn("include CONTRIBUTING.md", manifest)
         self.assertIn("include LINZA_TOOL_GUIDE.md", manifest)
         self.assertIn("recursive-include linza_mcp py.typed", manifest)
 
@@ -630,7 +628,7 @@ class OperatorSurfaceTests(OperatorTestCase):
         self.assertNotIn("from linza_mcp import *", (root / "server.py").read_text(encoding="utf-8"))
         self.assertNotIn('__import__("json")', (root / "linza_mcp" / "embed.py").read_text(encoding="utf-8"))
         self.assertNotIn("build_apply_queue", (root / "linza_mcp" / "server.py").read_text(encoding="utf-8"))
-        public_scripts = {path.name for path in (root / "scripts").iterdir()}
+        public_scripts = {path.name for path in (root / "scripts").iterdir() if path.is_file()}
         self.assertEqual(
             public_scripts,
             {"README.md", "linza_doctor.py", "smoke_mcp_tools.py", "smoke_copy_vault.py", "demo_core.ps1"},

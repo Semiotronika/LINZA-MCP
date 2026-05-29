@@ -30,12 +30,12 @@ should not be applied as YAML.
 ## Supervised Growth After Seed Review
 
 If there are not enough accepted examples, run `agent_workspace(action="teach")`
-first. Show the read-only seed items, ask the human to accept exact `rq-*`
+first. Show the read-only seed items, ask the user to accept exact `rq-*`
 items, and treat those accepted items as local teaching examples.
 
-After the human accepts a few seed examples, use
+After the user accepts a few seed examples, use
 `agent_workspace(action="grow", mode="assisted")` to continue building the
-knowledge base. Show `selected_rules` with the preview so the human sees which
+knowledge base. Show `selected_rules` with the preview so the user sees which
 accepted examples or local rules caused each item to be selected.
 
 Rules:
@@ -60,7 +60,7 @@ Rules:
 If an accepted item should stop guiding LINZA, use
 `agent_workspace(action="history")` to find its approval ID, then
 `agent_workspace(action="revoke_approval", approval_id=..., dry_run=true)`.
-Apply with `dry_run=false` only after the human confirms the exact ID.
+Apply with `dry_run=false` only after the user confirms the exact ID.
 
 ## Web Article Or Browser Capture
 

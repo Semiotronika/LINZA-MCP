@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.9 - 2026-05-29
+
+### Documentation
+
+- Clarified the public user-facing language in README, operator docs, and
+  user-visible status strings.
+- Marked `LINZA_VAULT` as optional in `server.json`, matching the server's
+  `./vault` startup default, and documented that embedding settings are only
+  needed for semantic indexing/search.
+- Removed the standalone contributing guide to keep the public package surface
+  focused on README, SECURITY, tool docs, examples, and tests.
+
 ## 0.1.8 - 2026-05-29
 
 ### Fixed
@@ -27,7 +39,7 @@
 
 ## 0.1.5 - 2026-05-26
 
-Human-facing review and release cleanup.
+User-facing review and release cleanup.
 
 ### Added
 
@@ -36,7 +48,7 @@ Human-facing review and release cleanup.
 - `agent_workspace(action="revoke_approval")` and storage-level soft revoke, so
   an approved item can be removed from active learning without deleting its
   audit trail.
-- Human display lines for review items, making agent output easier to show
+- User display lines for review items, making agent output easier to show
   without dumping raw JSON.
 
 ### Changed
@@ -131,7 +143,7 @@ Initial public preparation of LINZA.
 - LM Studio is now the default embedding setup for real semantic work.
 - Removed the old no-model embedding fallback from production code and public
   documentation. Tests use their own deterministic fake provider.
-- `guide_next_steps` can render the human-facing onboarding view in Russian or
+- `guide_next_steps` can render the user-facing onboarding view in Russian or
   English via `language` / `LINZA_LANGUAGE`.
 
 ### Security
