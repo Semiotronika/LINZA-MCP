@@ -122,10 +122,10 @@ Depth features now live inside the workflow rather than as extra tools:
 
 - `agent_workspace(action="map")` gives a compact read-only workspace snapshot
   for users and a structured next-action map for agents.
-- `agent_workspace(action="review_next")` includes readable cards for both
-  vault review (`rq-*`) and artifact/workspace review (`aw-*`), so an agent can
-  show `review_cards` / `human_view.cards` instead of raw JSON. Keep the
-  machine ID only as the exact handle for dry-run/apply.
+- `agent_workspace(action="review_next")` includes readable review-intent views
+  for both vault items (`rq-*`) and artifact/workspace items (`aw-*`), so an
+  agent can show the `review_cards` / `human_view.cards` payloads instead of
+  raw JSON. Keep the machine ID only as the exact handle for dry-run/apply.
 - `agent_workspace(action="teach")` selects a small read-only batch of seed
   items so the user can teach LINZA what good domains, formats, hierarchy, and
   causal links look like.

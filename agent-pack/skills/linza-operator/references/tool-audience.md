@@ -19,8 +19,8 @@ the separate low-level mode.
 
 Use it for artifact inbox, trace review, memory search, review intents, apply,
 history, soft revoke, supervised growth, and context export.
-It routes both vault `rq-*` review cards and artifact/workspace `aw-*` review
-cards through `review_next` and `apply_review_items`.
+It routes both vault `rq-*` review intents and artifact/workspace `aw-*`
+review intents through `review_next` and `apply_review_items`.
 
 ## Agent Read Tools
 

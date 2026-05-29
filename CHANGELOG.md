@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1 - 2026-05-30
+
+### Changed
+
+- Refined Russian user-facing review wording to "предложения" while keeping
+  internal review intent IDs and API fields stable.
+- Updated runtime review display labels to use "Предложение:" for both vault
+  and artifact/workspace review items.
+
 ## 0.2.0 - 2026-05-29
 
 ### Changed

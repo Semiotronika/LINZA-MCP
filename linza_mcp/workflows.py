@@ -328,18 +328,18 @@ def _review_user_cards(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _review_human_view(cards: list[dict[str, Any]], kind: str, queue_items: int | None = None) -> dict[str, Any]:
     total = queue_items if queue_items is not None else len(cards)
     return {
-        "title": "Карточки ревью LINZA",
+        "title": "Предложения LINZA",
         "summary": (
-            f"Показано {len(cards)} из {total} интентов ревью. "
-            "ID нужен только для точного dry-run/apply; читать лучше карточки по номерам."
+            f"Показано {len(cards)} из {total} предложений. "
+            "ID нужен только для точного dry-run/apply; читать лучше предложения по номерам."
         ),
         "kind": kind or "all",
         "cards": cards,
         "next_steps": [
             "Сначала прочитайте decision, related_notes и question.",
-            "Если интент выглядит верно, назовите его номер или review_id для dry-run preview.",
-            "Применяйте только маленькую партию проверенных карточек.",
-            "Пропускайте или переименовывайте карточки, где название области/формата звучит не как ваша карта.",
+            "Если предложение выглядит верно, назовите его номер или review_id для dry-run preview.",
+            "Применяйте только маленькую партию проверенных предложений.",
+            "Пропускайте или переименовывайте предложения, где название области/формата звучит не как ваша карта.",
         ],
         "safety": [
             "review_next ничего не записывает",
@@ -385,9 +385,9 @@ async def _vault_review_next(
         "requires_review": True,
         "items": items,
         "human_message": (
-            f"LINZA found {len(items)} vault review card(s). Accept only exact IDs you reviewed."
+            f"LINZA found {len(items)} vault review intent(s). Accept only exact IDs you reviewed."
             if items else
-            "No vault review cards matched this request."
+            "No vault review intents matched this request."
         ),
         "summary": {
             "items": len(items),
@@ -396,7 +396,7 @@ async def _vault_review_next(
         },
         "policy": [
             "review_next is read-only",
-            "vault review cards use rq-* IDs",
+            "vault review intents use rq-* IDs",
             "apply rq-* IDs with agent_workspace(action=\"apply_review_items\")",
             "dry_run is the default before any YAML or sidecar approval",
         ],
@@ -1207,10 +1207,10 @@ def _growth_human_view(growth: dict[str, Any]) -> dict[str, Any]:
         summary = "LINZA нужны несколько принятых пунктов, прежде чем она сможет продолжать по похожим примерам."
     elif status == "preview":
         title = "Предпросмотр роста"
-        summary = f"LINZA нашла интенты ревью, похожие на уже принятые примеры: {len(selected_ids)}."
+        summary = f"LINZA нашла предложения, похожие на уже принятые примеры: {len(selected_ids)}."
     elif status == "applied":
         title = "Рост применен"
-        summary = f"LINZA применила интенты ревью по принятым примерам: {len(selected_ids)}. Тела заметок сохранены."
+        summary = f"LINZA применила предложения по принятым примерам: {len(selected_ids)}. Тела заметок сохранены."
     else:
         title = "Рост по примерам"
         summary = "LINZA проверила принятые примеры и не нашла безопасной партии для применения."
@@ -1241,7 +1241,7 @@ def _growth_human_view(growth: dict[str, Any]) -> dict[str, Any]:
             },
             {
                 "title": "Безопасность",
-                "summary": "Рост идет по точным номерам интентов ревью и не переписывает тела исходных заметок.",
+                "summary": "Рост идет по точным номерам предложений и не переписывает тела исходных заметок.",
                 "items": [
                     "по умолчанию это пробный прогон",
                     "нужны принятые примеры",

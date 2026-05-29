@@ -39,9 +39,9 @@ When the user wants the agent to learn the base style before continuing, use
 `agent_workspace(action="teach")`. Show the small read-only seed batch and ask
 the user to accept exact `rq-*` items that look right.
 
-When showing `agent_workspace(action="review_next")`, present
-`review_cards` or `human_view.cards`. Treat raw `rq-*` / `aw-*` IDs as apply
-handles, not as the main explanation.
+When showing `agent_workspace(action="review_next")`, present the readable
+review-intent view from `review_cards` or `human_view.cards`. Treat raw
+`rq-*` / `aw-*` IDs as apply handles, not as the main explanation.
 
 When the user has accepted initial seed domains/material formats/hierarchy and
 wants the agent to continue building the base, use

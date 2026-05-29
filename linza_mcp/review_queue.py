@@ -128,7 +128,7 @@ def review_card_display(item: Dict[str, Any]) -> Dict[str, Any]:
     lines = []
     if item.get("id"):
         lines.append(f"Пункт ревью: {item['id']}")
-    lines.append(f"Интент ревью: {title}")
+    lines.append(f"Предложение: {title}")
     question = _display_text(human.get("question"), 220)
     if question:
         lines.append(f"Вопрос: {question}")
@@ -150,7 +150,7 @@ def redacted_queue_display(item: Dict[str, Any]) -> Dict[str, Any]:
     lines = []
     if item.get("id"):
         lines.append(f"Пункт ревью: {item['id']}")
-    lines.append(f"Интент ревью: проверить {label}")
+    lines.append(f"Предложение: проверить {label}")
     question = _display_text(human.get("question"), 220)
     if question:
         lines.append(f"Вопрос: {question}")

@@ -51,7 +51,7 @@ A material format is the user-facing name for a recurring note form. Examples: `
 
 LINZA first sees only structure: length, headings, lists, links, tables, folders, and recurring signals. That means the first result may have a neutral name: `type-001`. The user can say: "these are logs". LINZA then stores the mapping `type-001 -> logs` in `.linza`.
 
-The internal API keeps the old compatibility keys `material_type`, `type_name`, and `role`. Externally, the documentation and review cards say "format" because that is closer to how users actually think about their material.
+The internal API keeps the old compatibility keys `material_type`, `type_name`, and `role`. Externally, the documentation and user-facing view say "format" because that is closer to how users actually think about their material.
 
 Important boundary:
 
@@ -84,7 +84,7 @@ Why: similar structure, repeated headings, nearby chunks
 What changes: the format name is stored in .linza; Markdown notes do not change
 ```
 
-Internally, each intent remains a structure with an ID, evidence, and the data needed to preview the change and then confirm/write it. To you, LINZA returns ready-to-display cards so the agent can show a clear answer instead of JSON.
+Internally, each intent remains a structure with an ID, evidence, and the data needed to preview the change and then confirm/write it. To you, LINZA returns a ready user-facing view so the agent can show a clear answer instead of JSON.
 
 A good intent always answers the main question: **why does LINZA think this?** It should include sources, chunks, relation type, confidence, and an honest description of what will change after applying it.
 
@@ -94,7 +94,7 @@ A good intent always answers the main question: **why does LINZA think this?** I
 
 The autonomy model is:
 
-1. `review_next` shows cards.
+1. `review_next` shows review intents in a readable user-facing view.
 2. The user accepts, renames, or skips.
 3. `apply_review_items` runs dry-run first.
 4. After confirmation, the selected intent is written to `.linza` or to compact YAML, if that write type supports it.
@@ -237,7 +237,7 @@ Low-level tools are implementation details and are available through `agent_work
 | `map` | Build a workspace map without writing |
 | `teach` | Select strong accepted examples for learning |
 | `grow` | Show or apply growth from accepted examples; dry-run by default |
-| `review_next` | Show the next review cards; vault cards use `rq-*`, artifact and workspace cards use `aw-*` |
+| `review_next` | Show the next review intents; vault intents use `rq-*`, artifact and workspace intents use `aw-*` |
 | `apply_review_items` | Show or apply exact selected IDs; dry-run by default |
 | `history` | Show accepted and revoked approvals |
 | `revoke_approval` | Softly revoke an approval without deleting history |
@@ -250,7 +250,7 @@ Low-level tools are implementation details and are available through `agent_work
 | `analyze_trace` | Analyze a stored trace for review |
 | `review_calibr` | Review calibration lessons derived from traces |
 
-For maintainers, a separate low-level mode remains available for development and debugging. Full tool description: [Tool Catalog](LINZA_TOOL_CATALOG.md).
+For development and audit, a separate low-level mode remains available. Full tool description: [Tool Catalog](LINZA_TOOL_CATALOG.md).
 
 ---
 

@@ -65,7 +65,7 @@ def _kind_matches(item_kind: str, requested: str) -> bool:
 def _display_lines(item_id: str, title: str, evidence: str, effect: str) -> dict[str, Any]:
     lines = [
         f"Пункт ревью: {item_id}",
-        f"Интент ревью: {preview_text(title, 140)}",
+        f"Предложение: {preview_text(title, 140)}",
         f"Основание: {preview_text(evidence, 220)}",
         f"Что изменится: {effect}",
     ]

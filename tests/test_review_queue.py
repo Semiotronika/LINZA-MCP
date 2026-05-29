@@ -319,7 +319,7 @@ class ReviewQueueTests(OperatorTestCase):
             self.assertIn("human_message", result)
             self.assertTrue(all(item.get("display", {}).get("lines") for item in result["items"]))
             self.assertTrue(any(
-                line.startswith("Интент ревью:")
+                line.startswith("Предложение:")
                 for line in result["items"][0]["display"]["lines"]
             ))
             self.assertTrue(any(
