@@ -422,6 +422,7 @@ class LinzaMCPServer:
             return _json_result({
                 "status": "complete",
                 "files_indexed": self.storage.get_file_count(),
+                "note_chunks": self.storage.get_chunk_embedding_count(),
                 "bridges": len(self.storage.get_all_bridges()),
             })
         if name == "index_file":
@@ -515,6 +516,7 @@ class LinzaMCPServer:
         if name == "get_stats":
             return _json_result({
                 "files": self.storage.get_file_count(),
+                "note_chunks": self.storage.get_chunk_embedding_count(),
                 "profiles": len(self.storage.list_profiles()),
                 "bridges": len(self.storage.get_all_bridges()),
                 "active_profile": self.storage.get_active_profile(),

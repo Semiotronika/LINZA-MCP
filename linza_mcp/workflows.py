@@ -666,6 +666,7 @@ def doctor(core) -> dict[str, Any]:
     counts = {
         "source_markdown_files": _count_markdown_notes(vault_path),
         "indexed_files": storage.get_file_count(),
+        "note_chunks": storage.get_chunk_embedding_count(),
         "semantic_bridges": len(storage.get_all_bridges()),
         "profiles": len(storage.list_profiles()),
         "artifacts": storage.get_artifact_count(),

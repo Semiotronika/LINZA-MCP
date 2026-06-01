@@ -9,11 +9,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 
-LINZA_SCHEMA_VERSION = 2
+LINZA_SCHEMA_VERSION = 3
 
 SCHEMA_MIGRATIONS = (
     (1, "Initial LINZA sidecar schema"),
     (2, "Track embedding provider metadata for reindex safety"),
+    (3, "Store note chunk embeddings and bridge evidence"),
 )
 
 
@@ -85,10 +86,43 @@ class Storage:
                 source TEXT,
                 target TEXT,
                 score REAL,
+                note_score REAL,
+                chunk_score REAL,
+                chunk_score_raw REAL,
+                chunk_score_centered REAL,
+                chunk_score_mode TEXT,
+                evidence TEXT,
                 type TEXT,
                 created_at REAL
             )
         """)
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS chunk_embeddings (
+                chunk_id TEXT PRIMARY KEY,
+                chunker_version INTEGER,
+                path TEXT NOT NULL,
+                chunk_index INTEGER NOT NULL,
+                start_char INTEGER NOT NULL,
+                end_char INTEGER NOT NULL,
+                body_start_char INTEGER,
+                body_end_char INTEGER,
+                heading TEXT,
+                kind TEXT,
+                body_hash TEXT,
+                text_hash TEXT,
+                text TEXT NOT NULL,
+                embedding BLOB,
+                embedding_provider TEXT,
+                embedding_model TEXT,
+                embedding_dim INTEGER,
+                updated_at REAL,
+                file_hash TEXT
+            )
+        """)
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_path ON chunk_embeddings(path)")
+        self.conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_chunk_embeddings_path_index ON chunk_embeddings(path, chunk_index)"
+        )
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS search_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -204,6 +238,9 @@ class Storage:
                 continue
             if version == 2:
                 self._ensure_file_embedding_metadata_columns()
+            if version == 3:
+                self._ensure_chunk_embeddings_table()
+                self._ensure_bridge_evidence_columns()
             self.conn.execute(
                 """
                 INSERT OR IGNORE INTO schema_migrations (version, description, applied_at)
@@ -223,6 +260,49 @@ class Storage:
         for name, column_type in additions.items():
             if name not in existing:
                 self.conn.execute(f"ALTER TABLE files ADD COLUMN {name} {column_type}")
+
+    def _ensure_chunk_embeddings_table(self) -> None:
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS chunk_embeddings (
+                chunk_id TEXT PRIMARY KEY,
+                chunker_version INTEGER,
+                path TEXT NOT NULL,
+                chunk_index INTEGER NOT NULL,
+                start_char INTEGER NOT NULL,
+                end_char INTEGER NOT NULL,
+                body_start_char INTEGER,
+                body_end_char INTEGER,
+                heading TEXT,
+                kind TEXT,
+                body_hash TEXT,
+                text_hash TEXT,
+                text TEXT NOT NULL,
+                embedding BLOB,
+                embedding_provider TEXT,
+                embedding_model TEXT,
+                embedding_dim INTEGER,
+                updated_at REAL,
+                file_hash TEXT
+            )
+        """)
+        self.conn.execute("CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_path ON chunk_embeddings(path)")
+        self.conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_chunk_embeddings_path_index ON chunk_embeddings(path, chunk_index)"
+        )
+
+    def _ensure_bridge_evidence_columns(self) -> None:
+        existing = {row["name"] for row in self.conn.execute("PRAGMA table_info(bridges)")}
+        additions = {
+            "note_score": "REAL",
+            "chunk_score": "REAL",
+            "chunk_score_raw": "REAL",
+            "chunk_score_centered": "REAL",
+            "chunk_score_mode": "TEXT",
+            "evidence": "TEXT",
+        }
+        for name, column_type in additions.items():
+            if name not in existing:
+                self.conn.execute(f"ALTER TABLE bridges ADD COLUMN {name} {column_type}")
 
     def close(self):
         self.conn.close()
@@ -287,6 +367,7 @@ class Storage:
 
     def delete_file(self, path: str):
         self.conn.execute("DELETE FROM files WHERE path = ?", (path,))
+        self.conn.execute("DELETE FROM chunk_embeddings WHERE path = ?", (path,))
         self.conn.commit()
 
     def list_files(self) -> List[str]:
@@ -330,6 +411,142 @@ class Storage:
     def get_file_count(self) -> int:
         cur = self.conn.execute("SELECT COUNT(*) as c FROM files")
         return cur.fetchone()["c"]
+
+    # --- Note chunk embeddings ---
+
+    def replace_chunk_embeddings(
+        self,
+        path: str,
+        chunks: list[Dict[str, Any]],
+        vectors: list[List[float]],
+        *,
+        embedding_provider: str | None = None,
+        embedding_model: str | None = None,
+        embedding_dim: int | None = None,
+        file_hash: str = "",
+    ) -> None:
+        if len(chunks) != len(vectors):
+            raise ValueError("chunks and vectors must have the same length")
+        self.conn.execute("DELETE FROM chunk_embeddings WHERE path = ?", (path,))
+        timestamp = now_ts()
+        for index, (chunk, vector) in enumerate(zip(chunks, vectors)):
+            if not vector:
+                continue
+            chunk_id = str(chunk.get("chunk_id") or chunk.get("id") or f"chunk-{index:04d}")
+            chunk_index = int(chunk.get("index", chunk.get("chunk_index", index)))
+            dim = int(embedding_dim) if embedding_dim is not None else len(vector)
+            self.conn.execute("""
+                INSERT OR REPLACE INTO chunk_embeddings
+                (chunk_id, chunker_version, path, chunk_index, start_char, end_char,
+                 body_start_char, body_end_char, heading, kind, body_hash, text_hash,
+                 text, embedding, embedding_provider, embedding_model, embedding_dim,
+                 updated_at, file_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                chunk_id,
+                int(chunk.get("chunker_version", 1)),
+                path,
+                chunk_index,
+                int(chunk.get("start_char", chunk.get("start", 0)) or 0),
+                int(chunk.get("end_char", chunk.get("end", 0)) or 0),
+                int(chunk.get("body_start_char", chunk.get("start_char", chunk.get("start", 0))) or 0),
+                int(chunk.get("body_end_char", chunk.get("end_char", chunk.get("end", 0))) or 0),
+                str(chunk.get("heading") or ""),
+                str(chunk.get("kind") or chunk.get("type") or "text"),
+                str(chunk.get("body_hash") or ""),
+                str(chunk.get("text_hash") or ""),
+                str(chunk.get("text") or ""),
+                json.dumps(vector),
+                embedding_provider,
+                embedding_model,
+                dim,
+                timestamp,
+                file_hash,
+            ))
+        self.conn.commit()
+
+    def chunk_embeddings_are_fresh(
+        self,
+        path: str,
+        *,
+        file_hash: str,
+        embedding_provider: str | None,
+        embedding_model: str | None,
+        embedding_dim: int | None,
+        chunker_version: int,
+    ) -> bool:
+        rows = self.list_chunk_embeddings(path)
+        if not rows:
+            return False
+        for row in rows:
+            if row.get("file_hash") != file_hash:
+                return False
+            if row.get("embedding_provider") != embedding_provider:
+                return False
+            if str(row.get("embedding_model") or "") != str(embedding_model or ""):
+                return False
+            if embedding_dim is not None and int(row.get("embedding_dim") or 0) != int(embedding_dim):
+                return False
+            if int(row.get("chunker_version") or 0) != int(chunker_version):
+                return False
+        return True
+
+    def list_chunk_embeddings(self, path: Optional[str] = None, limit: int = 10000) -> list[Dict[str, Any]]:
+        if path:
+            cur = self.conn.execute("""
+                SELECT chunk_id, chunker_version, path, chunk_index, start_char, end_char,
+                       body_start_char, body_end_char, heading, kind, body_hash, text_hash,
+                       text, embedding, embedding_provider, embedding_model, embedding_dim,
+                       updated_at, file_hash
+                FROM chunk_embeddings
+                WHERE path = ? AND embedding IS NOT NULL
+                ORDER BY chunk_index ASC
+                LIMIT ?
+            """, (path, max(1, int(limit))))
+        else:
+            cur = self.conn.execute("""
+                SELECT chunk_id, chunker_version, path, chunk_index, start_char, end_char,
+                       body_start_char, body_end_char, heading, kind, body_hash, text_hash,
+                       text, embedding, embedding_provider, embedding_model, embedding_dim,
+                       updated_at, file_hash
+                FROM chunk_embeddings
+                WHERE embedding IS NOT NULL
+                ORDER BY path, chunk_index
+                LIMIT ?
+            """, (max(1, int(limit)),))
+        return [self._chunk_embedding_row(row) for row in cur]
+
+    @staticmethod
+    def _chunk_embedding_row(row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "chunk_id": row["chunk_id"],
+            "id": row["chunk_id"],
+            "chunker_version": row["chunker_version"],
+            "path": row["path"],
+            "index": row["chunk_index"],
+            "chunk_index": row["chunk_index"],
+            "start_char": row["start_char"],
+            "end_char": row["end_char"],
+            "start": row["start_char"],
+            "end": row["end_char"],
+            "body_start_char": row["body_start_char"],
+            "body_end_char": row["body_end_char"],
+            "heading": row["heading"] or "",
+            "kind": row["kind"] or "text",
+            "body_hash": row["body_hash"] or "",
+            "text_hash": row["text_hash"] or "",
+            "text": row["text"] or "",
+            "embedding": json.loads(row["embedding"]) if row["embedding"] else None,
+            "embedding_provider": row["embedding_provider"],
+            "embedding_model": row["embedding_model"],
+            "embedding_dim": row["embedding_dim"],
+            "updated_at": row["updated_at"],
+            "file_hash": row["file_hash"] or "",
+        }
+
+    def get_chunk_embedding_count(self) -> int:
+        cur = self.conn.execute("SELECT COUNT(*) as c FROM chunk_embeddings")
+        return int(cur.fetchone()["c"])
 
     # --- Corpus mean ---
 
@@ -461,12 +678,20 @@ class Storage:
         timestamp = now_ts()
         for bridge in bridges:
             self.conn.execute("""
-                INSERT INTO bridges (source, target, score, type, created_at)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO bridges
+                (source, target, score, note_score, chunk_score, chunk_score_raw,
+                 chunk_score_centered, chunk_score_mode, evidence, type, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 bridge["source"],
                 bridge["target"],
                 bridge["score"],
+                bridge.get("note_score"),
+                bridge.get("chunk_score"),
+                bridge.get("chunk_score_raw"),
+                bridge.get("chunk_score_centered"),
+                bridge.get("chunk_score_mode"),
+                json.dumps(bridge.get("evidence"), ensure_ascii=False) if bridge.get("evidence") else None,
                 bridge["type"],
                 timestamp,
             ))
@@ -474,30 +699,38 @@ class Storage:
 
     def get_bridges_for_file(self, path: str) -> List[Dict]:
         cur = self.conn.execute("""
-            SELECT source, target, score, type FROM bridges
+            SELECT source, target, score, note_score, chunk_score, chunk_score_raw,
+                   chunk_score_centered, chunk_score_mode, evidence, type
+            FROM bridges
             WHERE source = ? OR target = ?
         """, (path, path))
-        return [
-            {
-                "source": row["source"],
-                "target": row["target"],
-                "score": row["score"],
-                "type": row["type"],
-            }
-            for row in cur
-        ]
+        return [self._bridge_row(row) for row in cur]
 
     def get_all_bridges(self) -> List[Dict]:
-        cur = self.conn.execute("SELECT source, target, score, type FROM bridges")
-        return [
-            {
+        cur = self.conn.execute("""
+            SELECT source, target, score, note_score, chunk_score, chunk_score_raw,
+                   chunk_score_centered, chunk_score_mode, evidence, type
+            FROM bridges
+        """)
+        return [self._bridge_row(row) for row in cur]
+
+    @staticmethod
+    def _bridge_row(row: sqlite3.Row) -> Dict[str, Any]:
+        bridge = {
                 "source": row["source"],
                 "target": row["target"],
                 "score": row["score"],
                 "type": row["type"],
-            }
-            for row in cur
-        ]
+        }
+        for key in ("note_score", "chunk_score", "chunk_score_raw", "chunk_score_centered", "chunk_score_mode"):
+            if row[key] is not None:
+                bridge[key] = row[key]
+        if row["evidence"]:
+            try:
+                bridge["evidence"] = json.loads(row["evidence"])
+            except json.JSONDecodeError:
+                bridge["evidence"] = row["evidence"]
+        return bridge
 
     # --- Search history ---
 

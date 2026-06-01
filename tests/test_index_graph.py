@@ -3,6 +3,229 @@ from tests.test_support import *
 
 class IndexGraphTests(OperatorTestCase):
 
+    def test_chunk_markdown_is_stable_heading_aware_and_hashes_offsets(self):
+        from linza_mcp.chunker import CHUNKER_VERSION, chunk_markdown
+
+        text = "# Root\n\nAlpha paragraph.\n\n## Details\n\nBeta paragraph with enough words for a second block.\n"
+
+        chunks = chunk_markdown(text, source_id="note.md", max_chars=45, overlap_chars=8)
+        chunks_again = chunk_markdown(text, source_id="note.md", max_chars=45, overlap_chars=8)
+
+        self.assertEqual(chunks, chunks_again)
+        self.assertEqual([chunk["index"] for chunk in chunks], list(range(len(chunks))))
+        self.assertEqual(chunks[0]["source_id"], "note.md")
+        self.assertTrue(chunks[0]["chunk_id"].startswith("chunk:"))
+        self.assertEqual(chunks[0]["id"], chunks[0]["chunk_id"])
+        self.assertEqual(chunks[0]["chunker_version"], CHUNKER_VERSION)
+        self.assertEqual(chunks[0]["heading"], "Root")
+        self.assertEqual(chunks[-1]["heading"], "Details")
+        self.assertTrue(all(chunk["start_char"] < chunk["end_char"] for chunk in chunks))
+        self.assertTrue(all(chunk["char_count"] <= 45 + 8 for chunk in chunks))
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+        self.assertTrue(all(chunk["text"] == normalized[chunk["start_char"]:chunk["end_char"]] for chunk in chunks))
+        self.assertTrue(all(chunk["start"] == chunk["start_char"] for chunk in chunks))
+        self.assertTrue(all(chunk["end"] == chunk["end_char"] for chunk in chunks))
+        self.assertTrue(all(chunk["body_start_char"] >= chunk["start_char"] for chunk in chunks))
+        self.assertTrue(all(chunk["body_end_char"] == chunk["end_char"] for chunk in chunks))
+        self.assertTrue(all(chunk["body_hash"] for chunk in chunks))
+        self.assertTrue(all(chunk["text_hash"] for chunk in chunks))
+
+    def test_index_vault_stores_note_chunk_embeddings(self):
+        class TinyProvider:
+            model = "tiny"
+
+            async def embed(self, texts):
+                vectors = []
+                for text in texts:
+                    lower = text.lower()
+                    if "alpha" in lower:
+                        vectors.append([1.0, 0.0])
+                    elif "beta" in lower:
+                        vectors.append([0.0, 1.0])
+                    else:
+                        vectors.append([0.5, 0.5])
+                return vectors
+
+        tmp = tempfile.TemporaryDirectory()
+        vault = Path(tmp.name)
+        storage = Storage(vault / ".linza" / "linza.db")
+        core = LinzaCore(vault, storage, TinyProvider())
+        try:
+            (vault / "Alpha.md").write_text(
+                "# Alpha\n\nAlpha paragraph for chunk search.\n\n## Beta\n\nBeta paragraph for bridge evidence.\n",
+                encoding="utf-8",
+            )
+
+            asyncio.run(core.index_vault(force=True))
+
+            chunks = storage.list_chunk_embeddings("Alpha.md")
+            self.assertGreaterEqual(len(chunks), 2)
+            self.assertEqual(storage.get_chunk_embedding_count(), len(chunks))
+            self.assertTrue(all(chunk["path"] == "Alpha.md" for chunk in chunks))
+            self.assertTrue(all(chunk["chunk_id"].startswith("chunk:") for chunk in chunks))
+            self.assertTrue(all(chunk["chunker_version"] >= 1 for chunk in chunks))
+            self.assertTrue(all(chunk["body_hash"] for chunk in chunks))
+            self.assertTrue(all(chunk["text_hash"] for chunk in chunks))
+            self.assertEqual(chunks[0]["embedding_provider"], "TinyProvider")
+            self.assertEqual(chunks[0]["embedding_model"], "tiny")
+            self.assertEqual(chunks[0]["embedding_dim"], 2)
+            self.assertEqual(chunks[0]["embedding"], [1.0, 0.0])
+        finally:
+            storage.close()
+            tmp.cleanup()
+
+    def test_search_chunk_embeddings_uses_centered_scoring_for_large_global_sets(self):
+        from linza_mcp.chunker import CHUNKER_VERSION
+        from linza_mcp.indexing import search_chunk_embeddings
+
+        class QueryProvider:
+            async def embed(self, texts):
+                if texts != ["needle"]:
+                    raise AssertionError(texts)
+                return [[1.0, 0.0]]
+
+        tmp = tempfile.TemporaryDirectory()
+        vault = Path(tmp.name)
+        storage = Storage(vault / ".linza" / "linza.db")
+        core = LinzaCore(vault, storage, QueryProvider())
+        try:
+            for index in range(50):
+                path = f"note-{index}.md"
+                vector = [1.0, 0.0] if index == 0 else [0.0, 1.0]
+                storage.replace_chunk_embeddings(
+                    path,
+                    [{
+                        "chunk_id": f"chunk:{index}",
+                        "id": f"chunk:{index}",
+                        "chunker_version": CHUNKER_VERSION,
+                        "index": 0,
+                        "start_char": 0,
+                        "end_char": 10,
+                        "body_start_char": 0,
+                        "body_end_char": 10,
+                        "heading": "",
+                        "kind": "paragraph",
+                        "body_hash": f"body-{index}",
+                        "text_hash": f"text-{index}",
+                        "text": "needle" if index == 0 else "background",
+                    }],
+                    [vector],
+                    embedding_provider="QueryProvider",
+                    embedding_model="test",
+                    embedding_dim=2,
+                    file_hash=f"hash-{index}",
+                )
+
+            result = asyncio.run(search_chunk_embeddings(core, "needle", top_k=1))
+
+            self.assertEqual(result["score_mode_requested"], "auto")
+            self.assertEqual(result["score_mode"], "centered")
+            self.assertEqual(result["candidate_count"], 50)
+            self.assertEqual(result["matches"][0]["chunk_id"], "chunk:0")
+            self.assertEqual(result["matches"][0]["score"], result["matches"][0]["score_centered"])
+            self.assertEqual(result["matches"][0]["score_raw"], 1.0)
+
+            scoped = asyncio.run(search_chunk_embeddings(core, "needle", top_k=1, path="note-0.md"))
+            self.assertEqual(scoped["score_mode"], "raw")
+            self.assertIsNone(scoped["matches"][0]["score_centered"])
+
+            forced = asyncio.run(search_chunk_embeddings(
+                core,
+                "needle",
+                top_k=1,
+                path="note-0.md",
+                score_mode="centered",
+            ))
+            self.assertEqual(forced["score_mode"], "raw")
+            self.assertIsNone(forced["matches"][0]["score_centered"])
+            self.assertEqual(forced["candidate_count"], 1)
+        finally:
+            storage.close()
+            tmp.cleanup()
+
+    def test_rebuild_bridges_uses_centered_chunk_evidence_when_available(self):
+        from linza_mcp.chunker import CHUNKER_VERSION
+        from linza_mcp.indexing import rebuild_bridges
+
+        tmp = tempfile.TemporaryDirectory()
+        vault = Path(tmp.name)
+        storage = Storage(vault / ".linza" / "linza.db")
+        core = LinzaCore(vault, storage, StableTestEmbeddingProvider(dim=3))
+        try:
+            storage.upsert_file(
+                "Alpha.md",
+                "# Alpha\n\nShared needle topic.\n",
+                1.0,
+                [1.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                "hash-alpha",
+                embedding_provider="StableTestEmbeddingProvider",
+                embedding_model="test-embedding",
+                embedding_dim=3,
+            )
+            storage.upsert_file(
+                "Beta.md",
+                "# Beta\n\nShared needle topic.\n",
+                1.0,
+                [1.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                "hash-beta",
+                embedding_provider="StableTestEmbeddingProvider",
+                embedding_model="test-embedding",
+                embedding_dim=3,
+            )
+
+            for path, prefix in (("Alpha.md", "source"), ("Beta.md", "target")):
+                chunks = []
+                vectors = []
+                for index in range(25):
+                    is_needle = index == 0
+                    chunks.append({
+                        "chunk_id": f"chunk:{prefix}-{index}",
+                        "id": f"chunk:{prefix}-{index}",
+                        "chunker_version": CHUNKER_VERSION,
+                        "index": index,
+                        "start_char": index * 10,
+                        "end_char": index * 10 + 8,
+                        "body_start_char": index * 10,
+                        "body_end_char": index * 10 + 8,
+                        "heading": "Shared",
+                        "kind": "section",
+                        "body_hash": f"body-{prefix}-{index}",
+                        "text_hash": f"text-{prefix}-{index}",
+                        "text": "shared needle topic" if is_needle else "background topic",
+                    })
+                    if is_needle:
+                        vectors.append([1.0, 0.0, 0.0])
+                    elif prefix == "source":
+                        vectors.append([0.0, 1.0, 0.0])
+                    else:
+                        vectors.append([0.0, 0.0, 1.0])
+                storage.replace_chunk_embeddings(
+                    path,
+                    chunks,
+                    vectors,
+                    embedding_provider="StableTestEmbeddingProvider",
+                    embedding_model="test-embedding",
+                    embedding_dim=3,
+                    file_hash=f"hash-{prefix}",
+                )
+
+            asyncio.run(rebuild_bridges(core, threshold=0.1))
+
+            bridges = storage.get_all_bridges()
+            self.assertEqual(len(bridges), 1)
+            bridge = bridges[0]
+            self.assertGreater(bridge["note_score"], 0.9)
+            self.assertEqual(bridge["chunk_score_mode"], "centered")
+            self.assertEqual(bridge["chunk_score"], bridge["chunk_score_centered"])
+            self.assertEqual(bridge["evidence"]["source"]["chunk_id"], "chunk:source-0")
+            self.assertEqual(bridge["evidence"]["target"]["chunk_id"], "chunk:target-0")
+            self.assertIn("shared needle topic", bridge["evidence"]["source"]["snippet"])
+        finally:
+            storage.close()
+            tmp.cleanup()
+
     def test_guide_next_steps_routes_domain_seed_to_role_review(self):
         tmp, vault, storage, core = self.make_core()
         try:

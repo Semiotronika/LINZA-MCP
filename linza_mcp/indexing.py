@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from .chunker import CHUNKER_VERSION, chunk_markdown
 from .roles import guess_note_role
 from .utils import (
     extract_tags,
@@ -22,6 +23,10 @@ from .utils import (
     strip_frontmatter,
     tokenize,
 )
+
+
+CENTERED_CHUNK_SCORE_MIN_CANDIDATES = 50
+CHUNK_SCORE_MODES = {"auto", "raw", "centered"}
 
 
 def embedding_signature(core) -> tuple[str, str, int | None]:
@@ -307,6 +312,7 @@ async def index_vault(core, force: bool = False) -> None:
 
     all_raw: list[list[float]] = []
     file_data: list[tuple[str, str, float, list[float], str]] = []
+    chunk_jobs: list[tuple[str, str, str, int]] = []
     provider_name, model, expected_dim = await ensure_embedding_signature(core)
 
     for file_path in files:
@@ -318,13 +324,24 @@ async def index_vault(core, force: bool = False) -> None:
         existing = core.storage.get_file_metadata(rel)
         if not force and existing and existing["hash"] == file_hash:
             if _record_matches_embedding_signature(existing, core):
+                actual_dim = int(existing.get("embedding_dim") or len(existing["embedding"]))
                 all_raw.append(existing["embedding"])
                 file_data.append((rel, content, mtime, existing["embedding"], file_hash))
+                if not core.storage.chunk_embeddings_are_fresh(
+                    rel,
+                    file_hash=file_hash,
+                    embedding_provider=provider_name,
+                    embedding_model=model,
+                    embedding_dim=expected_dim or actual_dim,
+                    chunker_version=CHUNKER_VERSION,
+                ):
+                    chunk_jobs.append((rel, content, file_hash, actual_dim))
                 continue
 
         raw, _ = await compute_embeddings(core, [content])
         all_raw.append(raw[0])
         file_data.append((rel, content, mtime, raw[0], file_hash))
+        chunk_jobs.append((rel, content, file_hash, len(raw[0])))
 
     if all_raw:
         core.centerer.fit(all_raw)
@@ -342,6 +359,16 @@ async def index_vault(core, force: bool = False) -> None:
                 embedding_provider=provider_name,
                 embedding_model=model,
                 embedding_dim=expected_dim or len(raw_emb),
+            )
+        for rel, content, file_hash, actual_dim in chunk_jobs:
+            await refresh_chunk_embeddings(
+                core,
+                rel,
+                content,
+                file_hash=file_hash,
+                embedding_provider=provider_name,
+                embedding_model=model,
+                embedding_dim=expected_dim or actual_dim,
             )
         recenter_profiles(core)
     else:
@@ -373,10 +400,31 @@ async def index_single_file(core, path: str, content: Optional[str] = None) -> N
 
     file_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
     existing = core.storage.get_file_metadata(rel_path)
+    provider_name, model, expected_dim = await ensure_embedding_signature(core)
     if existing and existing["hash"] == file_hash and _record_matches_embedding_signature(existing, core):
+        actual_dim = int(existing.get("embedding_dim") or len(existing["embedding"]))
+        if not core.storage.chunk_embeddings_are_fresh(
+            rel_path,
+            file_hash=file_hash,
+            embedding_provider=provider_name,
+            embedding_model=model,
+            embedding_dim=expected_dim or actual_dim,
+            chunker_version=CHUNKER_VERSION,
+        ):
+            await refresh_chunk_embeddings(
+                core,
+                rel_path,
+                content,
+                file_hash=file_hash,
+                embedding_provider=provider_name,
+                embedding_model=model,
+                embedding_dim=expected_dim or actual_dim,
+            )
+            await rebuild_bridges(core)
         return
 
     raw = await core.embed.embed([content])
+    validate_embedding_batch(core, raw)
     provider_name, model, expected_dim = embedding_signature(core)
     mtime = full_path.stat().st_mtime if full_path.exists() else 0
     core.storage.upsert_file(
@@ -391,11 +439,62 @@ async def index_single_file(core, path: str, content: Optional[str] = None) -> N
         embedding_dim=expected_dim or len(raw[0]),
     )
     recompute_corpus_mean_and_recenter_index(core)
+    await refresh_chunk_embeddings(
+        core,
+        rel_path,
+        content,
+        file_hash=file_hash,
+        embedding_provider=provider_name,
+        embedding_model=model,
+        embedding_dim=expected_dim or len(raw[0]),
+    )
     await rebuild_bridges(core)
 
 
+async def refresh_chunk_embeddings(
+    core,
+    path: str,
+    content: str,
+    *,
+    file_hash: str,
+    embedding_provider: str | None,
+    embedding_model: str | None,
+    embedding_dim: int | None,
+) -> int:
+    """Refresh stored note chunk embeddings for one indexed Markdown file."""
+    chunks = chunk_markdown(
+        content,
+        source_id=path,
+        max_chars=int(core.config.get("chunk_max_chars", 1200)),
+        overlap_chars=int(core.config.get("chunk_overlap_chars", 120)),
+    )
+    if not chunks:
+        core.storage.replace_chunk_embeddings(
+            path,
+            [],
+            [],
+            embedding_provider=embedding_provider,
+            embedding_model=embedding_model,
+            embedding_dim=embedding_dim,
+            file_hash=file_hash,
+        )
+        return 0
+    vectors = await core.embed.embed([str(chunk.get("text") or "") for chunk in chunks])
+    validate_embedding_batch(core, vectors)
+    core.storage.replace_chunk_embeddings(
+        path,
+        chunks,
+        vectors,
+        embedding_provider=embedding_provider,
+        embedding_model=embedding_model,
+        embedding_dim=embedding_dim,
+        file_hash=file_hash,
+    )
+    return len(vectors)
+
+
 async def rebuild_bridges(core, threshold: Optional[float] = None) -> None:
-    """Build semantic bridges between files using centered embeddings."""
+    """Build semantic bridges between files using centered note and chunk evidence."""
     if threshold is None:
         threshold = core.config.get("bridge_threshold", 0.55)
 
@@ -434,18 +533,54 @@ async def rebuild_bridges(core, threshold: Optional[float] = None) -> None:
     norms = np.linalg.norm(arr, axis=1, keepdims=True)
     arr_norm = arr / (norms + 1e-9)
     sim = np.dot(arr_norm, arr_norm.T)
+    chunks_by_path = _chunks_by_path(core.storage.list_chunk_embeddings(limit=100000))
+    all_chunk_vectors = [
+        chunk["_vector"]
+        for chunks in chunks_by_path.values()
+        for chunk in chunks
+        if isinstance(chunk.get("_vector"), list)
+    ]
+    chunk_centroid = (
+        _vector_centroid(all_chunk_vectors)
+        if len(all_chunk_vectors) >= CENTERED_CHUNK_SCORE_MIN_CANDIDATES
+        else []
+    )
 
     bridges = []
     for i in range(len(paths)):
         for j in range(i + 1, len(paths)):
-            score = float(sim[i, j])
-            if score > threshold:
-                bridges.append({
-                    "source": paths[i],
-                    "target": paths[j],
-                    "score": score,
-                    "type": "semantic",
+            note_score = float(sim[i, j])
+            if note_score <= threshold:
+                continue
+            bridge: dict[str, Any] = {
+                "source": paths[i],
+                "target": paths[j],
+                "score": note_score,
+                "note_score": note_score,
+                "type": "semantic",
+            }
+            source_chunks = chunks_by_path.get(paths[i], [])
+            target_chunks = chunks_by_path.get(paths[j], [])
+            if source_chunks and target_chunks:
+                evidence = _best_chunk_pair(source_chunks, target_chunks, chunk_centroid)
+                if not evidence:
+                    bridges.append(bridge)
+                    continue
+                if evidence["score"] <= threshold:
+                    continue
+                chunk_score = float(evidence["score"])
+                bridge.update({
+                    "score": (0.35 * note_score) + (0.65 * chunk_score),
+                    "chunk_score": chunk_score,
+                    "chunk_score_raw": evidence["score_raw"],
+                    "chunk_score_centered": evidence["score_centered"],
+                    "chunk_score_mode": evidence["score_mode"],
+                    "evidence": {
+                        "source": _chunk_evidence(evidence["left"]),
+                        "target": _chunk_evidence(evidence["right"]),
+                    },
                 })
+            bridges.append(bridge)
 
     core.storage.update_bridges(bridges)
     logging.info("Built %s bridges (threshold=%s)", len(bridges), threshold)
@@ -475,6 +610,106 @@ def cosine_matrix(vectors: list[list[float]]) -> np.ndarray:
     norms = np.linalg.norm(arr, axis=1, keepdims=True)
     arr_norm = arr / (norms + 1e-9)
     return np.dot(arr_norm, arr_norm.T)
+
+
+def vector_cosine(left: list[float], right: list[float]) -> float:
+    if not left or not right or len(left) != len(right):
+        return 0.0
+    left_arr = np.array(left, dtype=float)
+    right_arr = np.array(right, dtype=float)
+    denom = float(np.linalg.norm(left_arr) * np.linalg.norm(right_arr))
+    if denom == 0.0:
+        return 0.0
+    return float(np.dot(left_arr, right_arr) / denom)
+
+
+def _vector_centroid(vectors: list[list[float]]) -> list[float]:
+    if not vectors:
+        return []
+    dim = len(vectors[0])
+    valid = [vector for vector in vectors if len(vector) == dim]
+    if not valid:
+        return []
+    arr = np.array(valid, dtype=float)
+    return np.mean(arr, axis=0).tolist()
+
+
+def _subtract_vector(vector: list[float], centroid: list[float]) -> list[float]:
+    if not centroid or len(vector) != len(centroid):
+        return vector
+    return [float(value) - float(centroid[index]) for index, value in enumerate(vector)]
+
+
+def _vector_norm(vector: list[float]) -> float:
+    return float(np.linalg.norm(np.array(vector, dtype=float))) if vector else 0.0
+
+
+def _chunk_vector(chunk: dict[str, Any]) -> list[float] | None:
+    vector = chunk.get("embedding")
+    if not isinstance(vector, list):
+        return None
+    try:
+        return [float(value) for value in vector]
+    except (TypeError, ValueError):
+        return None
+
+
+def _chunks_by_path(chunks: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    by_path: dict[str, list[dict[str, Any]]] = {}
+    for chunk in chunks:
+        vector = _chunk_vector(chunk)
+        if vector is None:
+            continue
+        enriched = {**chunk, "_vector": vector}
+        by_path.setdefault(str(chunk.get("path") or ""), []).append(enriched)
+    return by_path
+
+
+def _chunk_evidence(chunk: dict[str, Any]) -> dict[str, Any]:
+    text = " ".join(str(chunk.get("text") or "").split())
+    return {
+        "chunk_id": chunk.get("chunk_id", ""),
+        "path": chunk.get("path", ""),
+        "index": chunk.get("index"),
+        "heading": chunk.get("heading", ""),
+        "kind": chunk.get("kind", ""),
+        "start_char": chunk.get("start_char"),
+        "end_char": chunk.get("end_char"),
+        "snippet": text[:240],
+    }
+
+
+def _best_chunk_pair(
+    left_chunks: list[dict[str, Any]],
+    right_chunks: list[dict[str, Any]],
+    centroid: list[float],
+) -> dict[str, Any] | None:
+    best: dict[str, Any] | None = None
+    for left in left_chunks:
+        left_vec = left.get("_vector")
+        if not isinstance(left_vec, list):
+            continue
+        for right in right_chunks:
+            right_vec = right.get("_vector")
+            if not isinstance(right_vec, list) or len(left_vec) != len(right_vec):
+                continue
+            score_raw = vector_cosine(left_vec, right_vec)
+            score_centered = (
+                vector_cosine(_subtract_vector(left_vec, centroid), _subtract_vector(right_vec, centroid))
+                if centroid and len(centroid) == len(left_vec)
+                else None
+            )
+            score = score_centered if score_centered is not None else score_raw
+            if best is None or score > best["score"]:
+                best = {
+                    "score": score,
+                    "score_raw": score_raw,
+                    "score_centered": score_centered,
+                    "score_mode": "centered" if score_centered is not None else "raw",
+                    "left": left,
+                    "right": right,
+                }
+    return best
 
 
 def pairwise_stats(vectors: list[list[float]]) -> Dict[str, Any]:
@@ -720,6 +955,17 @@ async def search(
             "embedding_index": index_status,
         }
     q_vec = np.array(centered[0], dtype=float)
+    chunk_search = await search_chunk_embeddings(
+        core,
+        query,
+        top_k=max(20, int(top_k) * 6),
+        score_mode="auto",
+    )
+    best_chunk_by_path: dict[str, dict[str, Any]] = {}
+    for match in chunk_search.get("matches", []):
+        path = str(match.get("path") or "")
+        if path and path not in best_chunk_by_path:
+            best_chunk_by_path[path] = match
 
     paths, vectors = zip(*all_emb)
     try:
@@ -773,6 +1019,12 @@ async def search(
         lexical_overlaps[path] = overlap
 
     semantic_blend = (0.78 * sim) + (0.22 * lexical)
+    chunk_scores = np.array([
+        max(0.0, float(best_chunk_by_path.get(path, {}).get("score", sim[index])))
+        for index, path in enumerate(paths)
+    ])
+    if best_chunk_by_path:
+        semantic_blend = (0.60 * sim) + (0.18 * chunk_scores) + (0.22 * lexical)
     combined = np.maximum(semantic_blend, lexical)
     indices = np.argsort(-combined)
     top_window = combined[indices[: max(top_k * 2, 10)]]
@@ -787,6 +1039,21 @@ async def search(
             "score": round(float(combined[idx]), 4),
             "semantic_score": round(float(sim[idx]), 4),
             "lexical_score": round(float(lexical[idx]), 4),
+            "chunk_score": (
+                round(float(best_chunk_by_path[paths[idx]]["score"]), 4)
+                if paths[idx] in best_chunk_by_path
+                else None
+            ),
+            "chunk_score_mode": (
+                best_chunk_by_path[paths[idx]].get("score_mode")
+                if paths[idx] in best_chunk_by_path
+                else None
+            ),
+            "chunk_matches": (
+                [best_chunk_by_path[paths[idx]]]
+                if paths[idx] in best_chunk_by_path
+                else []
+            ),
             "score_gap": round(gap, 4),
             "confidence": similarity_confidence(
                 float(sim[idx]),
@@ -809,7 +1076,105 @@ async def search(
         "profile": profile_name,
         "total_indexed": len(paths),
         "retrieval": "mean-centered embeddings + lexical overlap",
+        "chunk_retrieval": {
+            "score_mode": chunk_search.get("score_mode"),
+            "candidate_count": chunk_search.get("candidate_count", 0),
+            "centroid_norm": chunk_search.get("centroid_norm", 0.0),
+        },
         "explanation": explanation,
+    }
+
+
+async def search_chunk_embeddings(
+    core,
+    query: str,
+    *,
+    top_k: int = 8,
+    path: str = "",
+    score_mode: str = "auto",
+) -> dict[str, Any]:
+    """Rank stored note chunks by semantic similarity to a query."""
+    normalized_query = str(query or "").strip()
+    limit = max(1, min(int(top_k), 50))
+    if not normalized_query:
+        return {"error": "Empty query.", "matches": []}
+
+    requested_score_mode = str(score_mode or "auto").strip().lower()
+    if requested_score_mode not in CHUNK_SCORE_MODES:
+        return {"error": "Invalid score_mode. Use auto, raw, or centered.", "matches": []}
+
+    query_vectors = await core.embed.embed([normalized_query])
+    validate_embedding_batch(core, query_vectors)
+    query_vec = query_vectors[0] if query_vectors else []
+    if not query_vec:
+        return {"error": "Embeddings unavailable.", "matches": []}
+
+    candidates: list[tuple[dict[str, Any], list[float]]] = []
+    for chunk in core.storage.list_chunk_embeddings(path or None, limit=100000):
+        chunk_vec = _chunk_vector(chunk)
+        if chunk_vec is None or len(chunk_vec) != len(query_vec):
+            continue
+        candidates.append((chunk, chunk_vec))
+
+    candidate_count = len(candidates)
+    use_centered = requested_score_mode == "centered" or (
+        requested_score_mode == "auto"
+        and not path
+        and candidate_count >= CENTERED_CHUNK_SCORE_MIN_CANDIDATES
+    )
+    if use_centered and candidate_count < 2:
+        use_centered = False
+
+    centroid = _vector_centroid([vector for _, vector in candidates]) if use_centered else []
+    query_centered = _subtract_vector(query_vec, centroid) if use_centered else []
+    active_score_mode = "centered" if use_centered else "raw"
+    centroid_norm = _vector_norm(centroid) if use_centered else 0.0
+
+    matches = []
+    for chunk, chunk_vec in candidates:
+        score_raw = vector_cosine(query_vec, chunk_vec)
+        score_centered = (
+            vector_cosine(query_centered, _subtract_vector(chunk_vec, centroid))
+            if use_centered
+            else None
+        )
+        score = score_centered if use_centered and score_centered is not None else score_raw
+        matches.append({
+            "chunk_id": chunk.get("chunk_id", ""),
+            "chunker_version": chunk.get("chunker_version"),
+            "path": chunk.get("path", ""),
+            "index": chunk.get("index"),
+            "start_char": chunk.get("start_char"),
+            "end_char": chunk.get("end_char"),
+            "body_start_char": chunk.get("body_start_char"),
+            "body_end_char": chunk.get("body_end_char"),
+            "heading": chunk.get("heading", ""),
+            "kind": chunk.get("kind", ""),
+            "body_hash": chunk.get("body_hash", ""),
+            "text_hash": chunk.get("text_hash", ""),
+            "score": round(float(score), 4),
+            "score_raw": round(float(score_raw), 4),
+            "score_centered": round(float(score_centered), 4) if score_centered is not None else None,
+            "score_mode": active_score_mode,
+            "text": chunk.get("text", ""),
+        })
+
+    matches.sort(key=lambda item: (-item["score"], item["path"], item["index"] or 0))
+    returned = matches[:limit]
+    score_gap = (
+        round(float(returned[0]["score"]) - float(returned[-1]["score"]), 4)
+        if len(returned) >= 2
+        else 0.0
+    )
+    return {
+        "query": normalized_query,
+        "top_k": limit,
+        "score_mode_requested": requested_score_mode,
+        "score_mode": active_score_mode,
+        "candidate_count": candidate_count,
+        "centroid_norm": round(centroid_norm, 4),
+        "score_gap": score_gap,
+        "matches": returned,
     }
 
 
@@ -979,6 +1344,7 @@ __all__ = [
     "recenter_profiles",
     "recompute_corpus_mean_and_recenter_index",
     "search",
+    "search_chunk_embeddings",
     "similarity_confidence",
     "suggest_links",
     "validate_embedding_batch",

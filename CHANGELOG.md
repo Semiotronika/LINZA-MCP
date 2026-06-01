@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.2 - 2026-06-01
+
+### Added
+
+- Added deterministic heading-aware note chunks with stable `chunk:*` IDs,
+  content hashes, offsets, chunker versioning, and overlap metadata.
+- Added sidecar `chunk_embeddings` storage and freshness checks keyed by file
+  hash, embedding provider, model, dimension, and chunker version.
+- Added centered chunk retrieval for large global candidate sets to reduce
+  embedding anisotropy noise.
+
+### Changed
+
+- Semantic search and bridges can now use chunk-level evidence while preserving
+  the existing note-level mean-centering, stale-index guard, and embedding
+  signature safety checks.
+- `index_all`, `get_stats`, and `agent_workspace(action="doctor")` now report
+  note chunk counts.
+
 ## 0.2.1 - 2026-05-30
 
 ### Changed
