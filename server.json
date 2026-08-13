@@ -7,12 +7,12 @@
     "url": "https://github.com/Semiotronika/LINZA-MCP",
     "source": "github"
   },
-  "version": "0.2.2",
+  "version": "0.2.3",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "linza-mcp",
-      "version": "0.2.2",
+      "version": "0.2.3",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
