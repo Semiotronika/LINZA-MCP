@@ -541,7 +541,7 @@ class OperatorSurfaceTests(OperatorTestCase):
         self.assertEqual(pyproject["project"]["version"], __version__)
         self.assertEqual(pyproject["project"]["readme"], "README_EN.md")
         self.assertEqual(pyproject["project"]["scripts"]["linza-mcp"], "linza_mcp.cli:main")
-        self.assertIn("mcp >= 1.0.0", pyproject["project"]["dependencies"])
+        self.assertIn("mcp >= 1.28, < 2", pyproject["project"]["dependencies"])
         self.assertIn("defusedxml >= 0.7", pyproject["project"]["dependencies"])
         self.assertIn("ruff >= 0.8", pyproject["project"]["optional-dependencies"]["dev"])
         self.assertIn("tomli >= 2.0; python_version < '3.11'", pyproject["project"]["optional-dependencies"]["dev"])
