@@ -351,7 +351,7 @@ python -m unittest discover -s tests
 - [GitHub](https://github.com/Semiotronika/LINZA-MCP)
 
 
-MIT License (c) 2026 Semiotronika
+MIT License (c) 2026 Maria Belkina
 
 *Косинусы считаются. Синтаксис меняется. Семантика остается.*
 

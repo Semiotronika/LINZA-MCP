@@ -348,7 +348,7 @@ python -m unittest discover -s tests
 - [PyPI](https://pypi.org/project/linza-mcp/)
 - [GitHub](https://github.com/Semiotronika/LINZA-MCP)
 
-MIT License (c) 2026 Semiotronika
+MIT License (c) 2026 Maria Belkina
 
 *Cosines are computed. Syntax changes. Semantics remains.*
 
